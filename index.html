@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#112720">
+  <meta name="description" content="山海问剑，一款免费的电脑端修仙动作游戏。御剑、探索、采药炼丹，在山海之间踏上仙途。">
+  <title>山海问剑 · 山海之间，自问长生</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="game-root">
+    <canvas id="world" aria-label="山海问剑游戏场景"></canvas>
+    <div class="world-vignette" aria-hidden="true"></div>
+    <div id="hud" class="hidden">
+      <section class="character-panel" aria-label="角色状态">
+        <button id="character-button" class="portrait" title="查看修为与属性" aria-label="查看修为与属性"><span>剑</span></button>
+        <div class="character-info">
+          <div class="character-line"><span class="character-name">无名剑修</span><span id="realm">炼气</span></div>
+          <div class="resource-row"><span class="resource-label">气血</span><div class="resource-track hp"><i id="hp-fill"></i><span id="hp-value"></span></div></div>
+          <div class="resource-row"><span class="resource-label">灵力</span><div class="resource-track mp"><i id="mp-fill"></i><span id="mp-value"></span></div></div>
+          <div class="xp-track" title="修为"><i id="xp-fill"></i></div>
+        </div>
+      </section>
+      <div class="area-title"><span class="area-line"></span><span id="zone-name">青云观</span><span class="area-line"></span></div>
+      <aside class="journey-panel" aria-label="地图和当前目标">
+        <div class="map-frame"><canvas id="minimap" width="216" height="162" aria-label="世界小地图"></canvas><span class="map-caption">山海舆图 <small>N ↑</small></span></div>
+        <div class="objective"><span class="eyebrow">仙途 · 当前目标</span><p id="objective"></p></div>
+        <div class="hud-menu"><button id="bag-button" title="行囊（B）">行囊 <kbd>B</kbd></button><button id="help-button">指引</button><button id="pause-button" title="暂停（Esc）">暂停 <kbd>Esc</kbd></button><button id="sound-button" class="sound-button" title="开启声音" aria-label="开启声音">♪</button></div>
+      </aside>
+      <div id="interact-hint" class="interact-hint hidden"><kbd>E</kbd><span></span></div>
+      <div id="notifications" class="notifications" aria-live="polite"></div>
+      <div class="control-note"><span>W A S D</span> 移动 <i>·</i> 鼠标瞄准 <i>·</i> <span>E</span> 交互</div>
+      <nav id="action-bar" class="action-bar" aria-label="战斗技能"></nav>
+      <div class="save-status" id="save-status">存档保存在此浏览器</div>
+    </div>
+    <section id="title-screen" class="title-screen" aria-label="开始游戏">
+      <div class="title-art" aria-hidden="true"></div>
+      <div class="title-shade" aria-hidden="true"></div>
+      <div class="title-corner top-left" aria-hidden="true"></div><div class="title-corner bottom-right" aria-hidden="true"></div>
+      <div class="title-content">
+        <p class="title-prelude">一剑入山海 · 一念问长生</p>
+        <h1>山海<span>问剑</span></h1>
+        <p class="title-english">THE PATH OF THE IMMORTAL</p>
+        <div class="title-rule"><i></i><span>✦</span><i></i></div>
+        <p class="title-description">御剑斩妖，采药炼丹。<br>从青云观启程，在山海之间，走出你的仙途。</p>
+        <div class="title-actions"><button id="continue-button" class="primary hidden">续写仙途 <span>CONTINUE →</span></button><button id="new-button" class="primary">踏入山海 <span>BEGIN JOURNEY →</span></button><button id="title-import-button" class="quiet">导入存档</button></div>
+        <p id="title-status" class="title-status" aria-live="polite"></p>
+      </div>
+      <div class="title-footer"><span>电脑端 · 键盘与鼠标</span><span>探索 / 战斗 / 修炼</span><button id="title-help-button">游玩指引 ↗</button></div>
+    </section>
+    <div id="modal-backdrop" class="modal-backdrop hidden">
+      <section id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1"></section>
+    </div>
+    <input id="import-file" type="file" accept="application/json,.json" hidden>
+    <div id="boot-error" class="boot-error hidden" role="alert"></div>
+  </main>
+  <script src="engine.js"></script>
+  <script src="renderer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+CONTRACT.md
+node_modules/
+*.log
+test-results/
+playwright-report/
+.DS_Store
+Thumbs.db
