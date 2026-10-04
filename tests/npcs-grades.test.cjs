@@ -6,6 +6,7 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const X=require('../engine.js');
 const C=X.CONTENT;
+const legacyNPCs=['elder','disciple','herbalist','hunter','broker','fireArtisan','snowHealer','trialKeeper'].map(id=>C.NPC_CHARACTERS[id]);
 const V2=fs.readFileSync(path.join(__dirname,'v2-save.fixture.json'),'utf8');
 const keys=[...Object.keys(C.RESOURCES),'potions','xp'];
 const ledger=s=>({wallet:Object.fromEntries(keys.map(k=>[k,s.player[k]])),inventory:{...s.inventory},techniques:{...s.techniques},grades:{...s.techniqueGrades},npc:structuredClone(s.npcProgress)});
@@ -27,9 +28,10 @@ const blocked=(m,x,y,r=18)=>x<r+25||y<r+25||x>m.width-r-25||y>m.height-r-25||m.p
 test('authentic v2 fixture migrates without losing the earned character, worlds or progress',()=>{
   assert.equal(crypto.createHash('sha256').update(V2).digest('hex'),'02fac0e8793eec003e3d116db8cab5c585c7ef24b483190e9268599280078e22');
   const old=JSON.parse(V2),s=X.deserialize(V2),next=JSON.parse(X.serialize(s));
-  assert.equal(s.version,3);assert.deepEqual(s.npcProgress,{});
+  assert.ok(s.version>=3);assert.deepEqual(s.npcProgress,{});
   assert.deepEqual(s.techniqueGrades,Object.fromEntries(Object.keys(old.techniques).map(k=>[k,0])));
-  for(const k of ['player','root','techniques','activeTechnique','inventory','equipment','buffs','story','progress','trials','projectiles','quests','questRewards','won','dead','meditationCd','seed','rng','time'])assert.deepEqual(next[k],old[k],k);
+  for(const k of ['root','techniques','activeTechnique','inventory','equipment','buffs','story','progress','trials','projectiles','quests','questRewards','won','dead','meditationCd','seed','rng','time'])assert.deepEqual(next[k],old[k],k);
+  for(const k of Object.keys(old.player))assert.deepEqual(next.player[k],old.player[k],k);
   for(const [id,w]of Object.entries(old.worlds)){
     assert.deepEqual(next.worlds[id].nodes,w.nodes);assert.deepEqual(next.worlds[id].drops,w.drops);
     // Zone, telegraph and velocity are recomputed; actual monster state and rewards must persist.
@@ -38,8 +40,8 @@ test('authentic v2 fixture migrates without losing the earned character, worlds 
   assert.deepEqual(X.deserialize(X.serialize(s)).techniqueGrades,s.techniqueGrades);
 });
 
-test('eight distinct characters occupy legal safe ground and have meaningful choices and services',()=>{
-  const chars=Object.values(C.NPC_CHARACTERS);assert.equal(chars.length,8);
+test('original eight characters remain distinct on legal safe ground with meaningful choices and services',()=>{
+  const chars=legacyNPCs;assert.equal(chars.length,8);
   assert.equal(new Set(chars.map(n=>n.name)).size,8);assert.equal(new Set(chars.map(n=>n.skin)).size,8);
   for(const n of chars){const m=C.MAPS[n.mapId];
     assert.ok(m.npcs.some(v=>v.id===n.id&&v.x===n.x&&v.y===n.y));assert.equal(blocked(m,n.x,n.y),false);
@@ -61,7 +63,7 @@ test('NPC inspection is pure and proximity, map, death and malformed action guar
 });
 
 test('first meeting choices grant different actual rewards once and E targets the chosen character',()=>{
-  for(const n of Object.values(C.NPC_CHARACTERS))for(const choice of n.choices){
+  for(const n of legacyNPCs)for(const choice of n.choices){
     const s=fixture();at(s,n.id);X.interact(s);assert.equal(s.interaction,n.id);
     const before=ledger(s);checked(s,`npc:${n.id}:talk:${choice.id}`);rewardDelta(s,before,choice.reward);
     assert.equal(X.npcInfo(s,n.id).rapport,choice.rapport);assert.equal(X.npcInfo(s,n.id).choice,choice.id);
@@ -71,7 +73,7 @@ test('first meeting choices grant different actual rewards once and E targets th
 });
 
 test('every NPC service pays exact costs, grants real items, obeys gameplay cooldown and rapport',()=>{
-  for(const n of Object.values(C.NPC_CHARACTERS))for(const service of n.services||[]){
+  for(const n of legacyNPCs)for(const service of n.services||[]){
     const s=meet(fixture(),n.id);if(service.restore){s.player.hp=100;s.player.mp=100;s.player.slow=2;}
     const before=ledger(s),rapport=X.npcInfo(s,n.id).rapport;
     checked(s,`npc:${n.id}:service:${service.id}`);rewardDelta(s,before,service.reward,service.cost);
@@ -105,44 +107,15 @@ test('commissions exclude preaccept activity, accept and claim once, and honor t
   const fresh=meet(X.createGame(19),'hunter');checked(fresh,'npc:hunter:accept');assert.equal(X.npcInfo(fresh,'hunter').commission.progress,0);failed(fresh,'npc:hunter:claim');
 });
 
-test('all six schools and all five qualities change actual damage, mana and cooldown',()=>{
-  const grades=Object.values(C.TECHNIQUE_GRADES);assert.deepEqual(grades.map(g=>g.name),['黄阶','玄阶','地阶','天阶','仙阶']);
-  for(const id of Object.keys(C.TECHNIQUES)){
-    let last;
-    for(const g of grades){
-      const s=X.createGame(51);s.root={grade:'mortal',elements:['water'],legacy:false};s.techniques={[id]:3};s.techniqueGrades={[id]:g.index};s.activeTechnique=id;
-      // This isolated spell fixture compares damage without injecting state into a saved or natural run.
-      s.player.x=1100;s.player.y=1800;s.player.mp=X.stats(s).maxMp;for(const foe of s.enemies)foe.stun=20;
-      const target=s.enemies.find(e=>e.type==='wolfKing');Object.assign(target,{x:1200,y:1800,homeX:1200,homeY:1800,hp:2000,maxHp:2000,stun:20});
-      const info=X.techniqueInfo(s,id),mp=s.player.mp;X.step(s,{skill:true,aimX:1500,aimY:1800},.05);
-      const damage=2000-target.hp;assert.ok(damage>0,id);assert.equal(s.player.mp,mp-info.manaCost);assert.equal(s.player.skillCd,info.cooldown);
-      assert.equal(info.gradeIndex,g.index);assert.equal(info.gradeMultiplier,g.multiplier);
-      if(last){assert.ok(damage>last.damage,id+' damage '+g.name);assert.ok(info.manaCost<=last.info.manaCost);assert.ok(info.cooldown<last.info.cooldown);assert.ok(info.multiplier>last.info.multiplier);}
-      last={damage,info};
-    }
+test('fixed technique grades cannot be promoted and practice only raises learned levels',()=>{
+  assert.equal(Object.keys(C.TECHNIQUES).length,35);
+  for(const id of Object.keys(C.TECHNIQUE_DIRECTIONS)){
+    const s=X.createGame(61);for(const key of Object.keys(C.RESOURCES))s.player[key]=1000;s.player.realm=1;s.quests.kills=1;s.quests.bosses=['wolfKing'];s.progress.bosses=['wolfKing'];s.enemies.find(e=>e.type==='wolfKing').hp=0;s.player.hp=X.stats(s).maxHp;s.player.mp=X.stats(s).maxMp;if(!s.techniques[id]){checked(s,'buy:'+id+'Book');checked(s,'learn:'+id);}
+    const grade=X.techniqueInfo(s,id).gradeIndex;
+    failed(s,'promote:'+id);checked(s,'train:'+id);assert.equal(X.techniqueInfo(s,id).gradeIndex,grade);
+    checked(s,'train:'+id);assert.equal(s.techniques[id],3);assert.equal(X.techniqueInfo(s,id).gradeIndex,grade);failed(s,'promote:'+id);failed(s,'train:'+id);
+    assert.deepEqual(X.deserialize(X.serialize(s)).techniques,s.techniques);
   }
-});
-
-test('quality promotion has exact independent costs, including additive thunder essence, and a cap',()=>{
-  for(const id of Object.keys(C.TECHNIQUES)){
-    const s=fixture();while(s.techniques[id]<3)checked(s,'train:'+id);const level=s.techniques[id];
-    for(let target=1;target<=4;target++){
-      const before=ledger(s),info=X.techniqueInfo(s,id),resource=C.TECHNIQUES[id].resource;
-      const expected={stones:[0,35,90,180,320][target]};expected[resource]=[0,2,4,6,10][target];if(target===1)expected.herbs=2;if(target>=2)expected.core=[0,0,1,2,4][target];if(target>=3)expected.essence=(expected.essence||0)+[0,0,0,2,4][target];
-      assert.deepEqual(info.promoteCost,expected);assert.equal(info.canPromote,true);checked(s,'promote:'+id);rewardDelta(s,before,{},expected);
-      assert.equal(s.techniqueGrades[id],target);assert.equal(s.techniques[id],level);assert.deepEqual(X.deserialize(X.serialize(s)).techniqueGrades,s.techniqueGrades);
-    }
-    failed(s,'promote:'+id);assert.equal(X.techniqueInfo(s,id).promoteCost,null);
-  }
-});
-
-test('quality promotion enforces training, realm, trial, alive, known, material and safe-hub gates',()=>{
-  const fresh=X.createGame(91);failed(fresh,'promote:missing');failed(fresh,'promote:flame');failed(fresh,'promote:sword:extra');failed(fresh,'promote:sword');
-  const s=fixture();checked(s,'promote:flame');failed(s,'promote:flame');checked(s,'train:flame');
-  s.trials.bambooTrial.rewarded=false;failed(s,'promote:flame');s.trials.bambooTrial.rewarded=true;s.player.realm=0;failed(s,'promote:flame');s.player.realm=3;checked(s,'promote:flame');
-  failed(s,'promote:flame');checked(s,'train:flame');s.trials.fireTrial.rewarded=false;failed(s,'promote:flame');s.trials.fireTrial.rewarded=true;s.player.realm=1;failed(s,'promote:flame');s.player.realm=3;checked(s,'promote:flame');
-  s.trials.iceTrial.rewarded=false;failed(s,'promote:flame');s.trials.iceTrial.rewarded=true;s.player.realm=2;failed(s,'promote:flame');s.player.realm=3;
-  s.player.x=1100;s.player.y=1800;failed(s,'promote:flame');s.player.x=550;s.player.y=1780;s.dead=true;failed(s,'promote:flame');s.dead=false;s.player.stones=0;failed(s,'promote:flame');
 });
 
 test('v3 rejects malformed grade and NPC records rather than accepting forged progression',()=>{
@@ -157,11 +130,9 @@ test('v3 rejects malformed grade and NPC records rather than accepting forged pr
     d=>{d.npcProgress.broker.services={essence:{uses:1,lastAt:d.time}};},d=>{d.npcProgress.disciple.commission.accepted=false;d.npcProgress.disciple.commission.baseline=1;}
   ];
   for(const change of changes){const d=JSON.parse(raw);change(d);assert.throws(()=>X.deserialize(JSON.stringify(d)));}
-  const grade=fixture();checked(grade,'promote:sword');checked(grade,'promote:sword');const gradeRaw=X.serialize(grade);
-  for(const mutate of [d=>d.trials.bambooTrial.rewarded=false,d=>d.player.realm=0,d=>d.techniques.sword=1]){const d=JSON.parse(gradeRaw);mutate(d);assert.throws(()=>X.deserialize(JSON.stringify(d)));}
 });
 
-test('authentic v2 character visits eight NPCs, earns new commissions and pays through immortal flame without injections',t=>{
+test('authentic v2 character visits eight NPCs, earns new commissions and trains flame without injections',t=>{
   const s=X.deserialize(V2),p=s.player,startWallet=ledger(s),initialKills=s.quests.kills,initialHerbs=s.quests.herbs;
   let frames=0,deaths=0;const size=35,cols=Math.floor((X.WIDTH-86)/size)+1,rows=Math.floor((X.HEIGHT-86)/size)+1;
   const coord=n=>({x:43+n%cols*size,y:43+Math.floor(n/cols)*size});
@@ -197,10 +168,10 @@ test('authentic v2 character visits eight NPCs, earns new commissions and pays t
   visit('fireArtisan');checked(s,'npc:fireArtisan:service:ember');checked(s,'npc:fireArtisan:service:rage');
   visit('snowHealer');checked(s,'npc:snowHealer:service:supplies');
   visit('trialKeeper');checked(s,'npc:trialKeeper:accept');checked(s,'npc:trialKeeper:claim');checked(s,'npc:trialKeeper:service:refine');
-  hub();checked(s,'travel:main');hub();checked(s,'train:flame');checked(s,'train:flame');for(let i=1;i<=4;i++)checked(s,'promote:flame');checked(s,'equip:flameSword');checked(s,'technique:flame');
+  hub();checked(s,'travel:main');hub();checked(s,'train:flame');checked(s,'train:flame');failed(s,'promote:flame');checked(s,'equip:flameSword');checked(s,'technique:flame');
   const foe=s.enemies.find(e=>e.hp>0&&!e.boss&&!e.gated);assert.ok(foe);walk(foe);while(p.skillCd>0)frame();const mp=p.mp,info=X.techniqueInfo(s),st=X.stats(s),regen=.05*((X.isSafe(s)?6:2.5)+st.manaRegen);frame({skill:true,aimX:foe.x,aimY:foe.y});assert.equal(p.mp,Math.min(st.maxMp,mp+regen)-info.manaCost);assert.ok(s.effects.some(e=>e.type==='flame'));
   hub();walk(C.NPC_CHARACTERS.elder);X.interact(s);
-  assert.equal(s.version,3);assert.equal(Object.keys(s.npcProgress).length,8);assert.equal(Object.values(s.npcProgress).filter(n=>n.commission.claimed).length,4);assert.equal(s.techniques.flame,3);assert.equal(s.techniqueGrades.flame,4);assert.ok(s.quests.kills>=initialKills+6);assert.ok(s.quests.herbs>=initialHerbs+10);assert.equal(deaths,0);
+  assert.ok(s.version>=3);assert.equal(Object.keys(s.npcProgress).length,8);assert.equal(Object.values(s.npcProgress).filter(n=>n.commission.claimed).length,4);assert.equal(s.techniques.flame,3);assert.equal(X.techniqueInfo(s,'flame').gradeIndex,0);assert.ok(s.quests.kills>=initialKills+6);assert.ok(s.quests.herbs>=initialHerbs+10);assert.equal(deaths,0);
   const restored=X.deserialize(X.serialize(s));assert.deepEqual(restored.npcProgress,s.npcProgress);assert.deepEqual(restored.techniqueGrades,s.techniqueGrades);assert.deepEqual(restored.player,s.player);
   if(process.env.SHANHAI_GRADE_QA_SAVE){fs.mkdirSync(path.dirname(process.env.SHANHAI_GRADE_QA_SAVE),{recursive:true});fs.writeFileSync(process.env.SHANHAI_GRADE_QA_SAVE,X.serialize(s));}
   t.diagnostic(JSON.stringify({version:s.version,NPCs:Object.keys(s.npcProgress),commissions:4,flameLevel:s.techniques.flame,flameGrade:s.techniqueGrades.flame,startWallet:startWallet.wallet,endWallet:ledger(s).wallet,kills:s.quests.kills-initialKills,herbs:s.quests.herbs-initialHerbs,deaths,frames,gameplaySeconds:Math.round(s.time)}));

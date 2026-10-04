@@ -50,8 +50,9 @@ function graph(m,start){
 test('content loads in Node and a browser and describes real usable systems',()=>{
   const browser={};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../content.js'),'utf8'),browser);
   assert.deepEqual(Object.keys(browser.XianContent.MAPS),Object.keys(C.MAPS));
-  assert.deepEqual(Object.keys(C.MAPS),['main','red','snow','bambooTrial','fireTrial','iceTrial']);
-  assert.deepEqual(Object.keys(C.TECHNIQUES),['sword','flame','frost','wood','thunder','earth']);
+  assert.deepEqual(Object.keys(C.MAPS).sort(),['main','red','snow','bambooTrial','fireTrial','iceTrial','sect'].sort());
+  assert.deepEqual(Object.keys(C.TECHNIQUE_DIRECTIONS).sort(),['sword','flame','frost','wood','thunder','earth','arrow'].sort());
+  assert.equal(Object.keys(C.TECHNIQUES).length,35);
   assert.equal(Object.keys(C.ROOT_GRADES).length,5);assert.equal(Object.keys(C.ELEMENTS).length,8);
   assert.equal(Object.keys(C.RESOURCES).length,8);assert.ok(Object.keys(C.RECIPES).length>=8);
   for(const section of ['MAPS','TECHNIQUES','ROOT_GRADES','ELEMENTS','RESOURCES','ITEMS','RECIPES','SIDE_QUESTS']){
@@ -72,7 +73,7 @@ test('content loads in Node and a browser and describes real usable systems',()=
   assert.ok(C.STORY.length>=5);for(const chapter of C.STORY){assert.ok(chapter.options.length>=2);for(const option of chapter.options)assert.ok(Object.keys(option.reward).length>0&&option.relation);}
 });
 
-test('all six maps have distinct terrain and reachable resources, bosses, NPCs and exits',()=>{
+test('all maps have distinct terrain and reachable resources, bosses, NPCs and exits',()=>{
   const signatures=new Set();
   for(const m of Object.values(C.MAPS)){
     assert.equal(m.width,3200);assert.equal(m.height,2400);assert.equal(mapBlocked(m,m.start.x,m.start.y),false);
@@ -88,7 +89,7 @@ test('all six maps have distinct terrain and reachable resources, bosses, NPCs a
       assert.ok(m.portals.some(p=>p.target==='main'),'Trial needs a physical exit');
     }
   }
-  assert.equal(signatures.size,6);
+  assert.equal(signatures.size,Object.keys(C.MAPS).length);
 });
 
 test('seeded roots cover all five grades and eight elements with real growth and cultivation',()=>{
@@ -127,9 +128,9 @@ test('matching roots affect technique cost and damage and elemental equipment ad
 
 function safeOk(s){return !!s.lastAction&&s.lastAction.ok;}
 
-test('all six Q schools have distinct combat effects and every active effect can be saved',()=>{
+test('all Q schools have distinct combat effects and every active effect can be saved',()=>{
   const X=engine(),signatures=new Set();
-  for(const id of Object.keys(C.TECHNIQUES)){
+  for(const id of Object.keys(C.TECHNIQUE_DIRECTIONS)){
     const s=fixture();s.techniques[id]=1;if(s.techniqueGrades)s.techniqueGrades[id]=0;s.activeTechnique=id;
     s.player.x=1100;s.player.y=1800;s.player.hp=X.stats(s).maxHp*.5;
     for(let i=0;i<3;i++)Object.assign(s.enemies[i],{x:1190+i*120,y:1800,homeX:1190+i*120,homeY:1800});
@@ -150,13 +151,13 @@ test('all six Q schools have distinct combat effects and every active effect can
     assert.equal(restored.player.shield,s.player.shield);
     assert.equal(restored.enemies[0].burn,s.enemies[0].burn);assert.equal(restored.enemies[0].slow,s.enemies[0].slow);assert.equal(restored.enemies[0].rooted,s.enemies[0].rooted);
   }
-  assert.equal(signatures.size,6);
+  assert.equal(signatures.size,Object.keys(C.TECHNIQUE_DIRECTIONS).length);
 });
 
 test('books, purchases, training and selecting schools enforce costs, caps and safety',()=>{
   const X=engine(),s=fixture();let before=ledger(s);X.action(s,'learn:flame');assert.equal(safeOk(s),false);assert.deepEqual(ledger(s),before);
   s.player.stones=1000;
-  for(const id of Object.keys(C.TECHNIQUES).filter(id=>id!=='sword')){
+  for(const id of Object.keys(C.TECHNIQUE_DIRECTIONS).filter(id=>id!=='sword')){
     const book=C.ITEMS[id+'Book'],coins=s.player.stones;
     X.action(s,'buy:'+book.id);assert.equal(safeOk(s),true);assert.equal(s.player.stones,coins-book.price);assert.equal(s.inventory[book.id],1);
     X.action(s,'use:'+book.id);assert.equal(safeOk(s),true);assert.equal(s.techniques[id],1);assert.equal(s.inventory[book.id],0);
@@ -178,12 +179,12 @@ test('books, purchases, training and selecting schools enforce costs, caps and s
 test('every recipe consumes exact materials, creates actual items and rejects unpaid repeats',()=>{
   const X=engine();
   for(const recipe of Object.values(C.RECIPES)){
-    const s=fixture(3);for(const key of Object.keys(C.RESOURCES))s.player[key]=1000;
+    const s=fixture(Math.max(3,recipe.realmRequired));for(const key of Object.keys(C.RESOURCES))s.player[key]=1000;
     const before=ledger(s);X.action(s,'craft:'+recipe.id);assert.equal(safeOk(s),true,recipe.id);
     for(const key of Object.keys(C.RESOURCES))assert.equal(s.player[key],before.resources[key]-(recipe.cost[key]||0));
     for(const[id,amount]of Object.entries(recipe.output))assert.equal(C.ITEMS[id].resourceField?s.player[id]-(before.resources[id]||0):(s.inventory[id]||0)-(before.inventory[id]||0),amount);
     if(Object.keys(recipe.output).some(id=>C.ITEMS[id].type==='equipment')){const paid=ledger(s);X.action(s,'craft:'+recipe.id);assert.equal(safeOk(s),false);assert.deepEqual(ledger(s),paid);}
-    const poor=fixture(3),empty=ledger(poor);X.action(poor,'craft:'+recipe.id);assert.equal(safeOk(poor),false);assert.deepEqual(ledger(poor),empty);
+    const poor=fixture(Math.max(3,recipe.realmRequired)),empty=ledger(poor);X.action(poor,'craft:'+recipe.id);assert.equal(safeOk(poor),false);assert.deepEqual(ledger(poor),empty);
   }
 });
 
@@ -221,7 +222,7 @@ test('travel honors realm and physical portal gates and each map retains its own
   X.interact(locked);assert.equal(locked.interaction,'portal:bambooTrial');X.action(locked,'travel:bambooTrial');assert.equal(safeOk(locked),true);assert.equal(locked.mapId,'bambooTrial');assert.equal(locked.interaction,null);
   const exit=C.MAPS.bambooTrial.portals[0];locked.player.x=exit.x;locked.player.y=exit.y;X.interact(locked);assert.equal(locked.interaction,'portal:main');X.action(locked,'travel:main');assert.equal(locked.mapId,'main');
   const s=fixture(3),markers={};
-  for(const id of Object.keys(C.MAPS)){
+  for(const id of Object.keys(C.MAPS).filter(id=>id!=='sect')){
     hub(s);if(id!==s.mapId){X.action(s,'travel:'+id);assert.equal(safeOk(s),true);}
     assert.equal(X.zoneAt(2000,1000,s).id,id==='main'?'bamboo':id);
     const node=s.nodes.find(n=>n.type!=='herb'&&n.type!=='crystal')||s.nodes[0];
@@ -238,7 +239,7 @@ test('travel honors realm and physical portal gates and each map retains its own
     }}
     markers[id].ready=node.ready;hub(s);
   }
-  const restored=X.deserialize(X.serialize(s));assert.deepEqual(restored.progress.visited,Object.keys(C.MAPS));
+  const restored=X.deserialize(X.serialize(s));assert.deepEqual(restored.progress.visited,Object.keys(C.MAPS).filter(id=>id!=='sect'));
   for(const[id,marker]of Object.entries(markers)){
     const world=restored.worlds[id];assert.equal(world.nodes.find(n=>n.id===marker.node).ready,marker.ready);assert.equal(world.enemies.find(e=>e.id===marker.enemy).hp,marker.hp);
     assert.ok(world.drops.some(d=>d.amount===7&&d.x===3000&&d.y===2300));

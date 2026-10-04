@@ -12,6 +12,7 @@
   const RESOURCES={stones:{name:'灵石',description:'采集灵晶、击败妖兽所得，用于交易、淬炼与道术研习。',color:'#ead193'},herbs:{name:'灵草',description:'野外采集，可炼回春丹、护体散和通灵丹。',color:'#a5d597'},iron:{name:'玄铁',description:'矿脉和石卫掉落，用于铸剑、土系研习与护甲。',color:'#a9b9c7'},spiritwood:{name:'灵木',description:'古树枝节与青竹洞天所产，用于木系功法与法衣。',color:'#9acd9d'},ember:{name:'赤焰砂',description:'赤霄荒原火脉所得，用于火系功法、烈焰剑及攻伐丹药。',color:'#ef9b70'},frost:{name:'寒晶',description:'北冥雪域冰脉所得，用于冰系功法和玄冰法器。',color:'#b3e0ee'},core:{name:'妖丹',description:'精英妖兽、首领与秘境掉落，高阶研习和法宝必需。',color:'#cab5e5'},essence:{name:'灵髓',description:'稀有灵脉和秘境宝匣所产，用于雷系道术与仙品装备。',color:'#8bddd6'}};
   Object.entries(RESOURCES).forEach(([id,r])=>r.id=id);
   const TECHNIQUES={
+    arrow:{id:'arrow',name:'穿云箭诀',description:'五箭扇射，中央灵箭穿透敌阵；灵弓适配时威力额外提高。',element:'wind',color:'#b3e8ca',manaCost:25,cooldown:6.5,resource:'spiritwood',passive:'speed',preferredWeapon:'bow'},
     sword:{id:'sword',name:'御剑诀',description:'三道飞剑与近身剑气。等级提高飞剑伤害与射程。',element:'metal',color:'#e4ddac',manaCost:28,cooldown:7,resource:'iron',passive:'attack'},
     flame:{id:'flame',name:'离火焚天',description:'发射爆裂火球，灼烧命中目标，周身炎环引燃近敌。',element:'fire',color:'#ef976b',manaCost:30,cooldown:8,resource:'ember',passive:'attack'},
     frost:{id:'frost',name:'玄冰凝霜',description:'五枚寒冰碎片穿透敌阵，并大幅减速近敌。',element:'ice',color:'#b3e7ff',manaCost:26,cooldown:7.5,resource:'frost',passive:'maxMp'},
@@ -34,7 +35,7 @@
   add('rageElixir','赤阳丹','consumable','灵品','持续 40 秒，攻击提高 25%，重复服用仅刷新时长。',{price:48,effect:'rage'});
   add('wardPowder','护体散','consumable','灵品','持续 45 秒，所受伤害降低 25%。',{price:42,effect:'ward'});
   add('insightPill','通灵丹','consumable','灵品','持续 60 秒，战斗、采集修为提高 30%。',{price:65,effect:'insight'});
-  for(const t of Object.values(TECHNIQUES))if(t.id!=='sword')add(`${t.id}Book`,`${t.name}残卷`,'book','灵品',`残卷的物品珍稀度为灵品；研读后习得${t.name}黄阶一重。功法品阶需另行晋升。`,{technique:t.id,price:{flame:45,frost:55,wood:35,thunder:75,earth:50}[t.id]});
+  for(const t of Object.values(TECHNIQUES))if(t.id!=='sword')add(`${t.id}Book`,`${t.name}残卷`,'book','灵品',`残卷的物品珍稀度为灵品；研读后习得${t.name}黄阶一重。功法品阶需另行晋升。`,{technique:t.id,price:{arrow:35,flame:45,frost:55,wood:35,thunder:75,earth:50}[t.id]});
   add('starterSword','青锋剑','equipment','凡品','初入山门的练功灵剑，可继续在铸剑台淬炼。',{slot:'weapon',tier:0,stats:{attack:0}});
   add('clothRobe','青云道衣','equipment','凡品','轻便的山门道衣。',{slot:'robe',tier:0,stats:{maxHp:0}});
   add('ironSword','玄铁剑','equipment','凡品','沉稳剑锋，攻击 +7。',{slot:'weapon',tier:1,stats:{attack:7},price:85});
@@ -105,5 +106,116 @@
     trialKeeper:{id:'trialKeeper',name:'青篁',role:'守阵灵',skin:'trialKeeper',mapId:'bambooTrial',x:300,y:1580,color:'#adc7a2',description:'青竹洞天的守阵灵，见证三重试炼，并将灵木与妖丹凝成灵髓。',dialogue:'“我只记录真正走过三重阵的人。你可随时退出，也可带着自己的剑法回来。”',choices:[{id:'respect',label:'立誓走过三重竹阵',description:'获得 1 灵髓，交情 +2。',reward:{essence:1},rapport:2},{id:'practical',label:'请教阵中妖丹来历',description:'获得 1 妖丹，交情 +1。',reward:{core:1},rapport:1}],commission:{name:'竹阵见证',description:'完成青竹洞天的三波真实战斗；已有首通记录可交差。',kind:'trial',trial:'bambooTrial',target:1,relative:false,reward:{spiritwood:4,wardPowder:1,xp:80}},services:[{id:'refine',label:'凝练青竹灵髓',description:'3 灵木、1 妖丹与 15 灵石凝成 2 灵髓；交情 2 以上，每 25 秒一次。',cost:{spiritwood:3,core:1,stones:15},reward:{essence:2},cooldown:25,minRapport:2}]}
   };
   for(const npc of Object.values(NPC_CHARACTERS))MAPS[npc.mapId].npcs.push({id:npc.id,name:npc.name,role:npc.role,skin:npc.skin,color:npc.color,x:npc.x,y:npc.y});
-  return{MAPS,TECHNIQUES,TECHNIQUE_GRADES,NPC_CHARACTERS,ROOT_GRADES,ELEMENTS,RESOURCES,ITEMS,RECIPES,STORY,SIDE_QUESTS,TRIAL_REWARDS};
+  const WEAPON_TYPES={
+    sword:{id:'sword',name:'灵剑',description:'近身扇形斩击，适配御剑诀。',range:108,cooldown:.36,damageMultiplier:1,projectileSpeed:0,color:'#e9dfaf'},
+    bow:{id:'bow',name:'灵弓',description:'远程直射灵箭，不消耗箭矢，适配穿云箭诀。',range:760,cooldown:.55,damageMultiplier:1.45,projectileSpeed:640,color:'#b3e8ca'},
+    staff:{id:'staff',name:'法杖',description:'发射灵力法弹，命中后小范围溅射，适配五行法术。',range:620,cooldown:.65,damageMultiplier:1.35,projectileSpeed:430,color:'#b6c7f0'}
+  };
+  for(const item of Object.values(ITEMS))if(item.slot==='weapon')item.weaponKind='sword';
+  add('trainingBow','青竹练弓','equipment','凡品','轻便灵弓，使左键变为真正的远程箭矢。',{slot:'weapon',weaponKind:'bow',tier:0,stats:{attack:0}});
+  add('ironBow','玄铁长弓','equipment','凡品','攻击 +8，远射箭矢。',{slot:'weapon',weaponKind:'bow',tier:1,stats:{attack:8}});
+  add('stormBow','追风灵弓','equipment','灵品','攻击 +18、速度 +8，适配穿云箭诀。',{slot:'weapon',weaponKind:'bow',tier:2,stats:{attack:18,speed:8}});
+  add('celestialBow','天罡逐星弓','equipment','仙品','攻击 +36、灵力上限 +25，风系道术额外 +12%。',{slot:'weapon',weaponKind:'bow',tier:4,stats:{attack:36,maxMp:25},element:'wind',affinity:.12});
+  add('trainingStaff','引灵木杖','equipment','凡品','初学法杖，左键发射灵力法弹，灵力上限 +6。',{slot:'weapon',weaponKind:'staff',tier:0,stats:{maxMp:6}});
+  add('spiritStaff','长春灵杖','equipment','凡品','攻击 +9、灵力上限 +15。',{slot:'weapon',weaponKind:'staff',tier:1,stats:{attack:9,maxMp:15}});
+  add('thunderStaff','九霄雷杖','equipment','灵品','攻击 +19、灵力上限 +25，雷法额外 +10%。',{slot:'weapon',weaponKind:'staff',tier:2,stats:{attack:19,maxMp:25},element:'thunder',affinity:.10});
+  add('astralStaff','太虚星辰杖','equipment','仙品','攻击 +34、灵力上限 +45、灵力回复 +1/秒。',{slot:'weapon',weaponKind:'staff',tier:4,stats:{attack:34,maxMp:45,manaRegen:1}});
+  add('heavenSword','太清斩仙剑','equipment','仙品','攻击 +38、气血上限 +35，金系道术额外 +12%。',{slot:'weapon',weaponKind:'sword',tier:4,stats:{attack:38,maxHp:35},element:'metal',affinity:.12});
+  const extraRecipes={ironBow:{name:'铸造玄铁长弓',cost:{spiritwood:5,iron:3,stones:40},output:{ironBow:1},realmRequired:0},spiritStaff:{name:'制成长春灵杖',cost:{spiritwood:6,essence:1,stones:45},output:{spiritStaff:1},realmRequired:0},stormBow:{name:'追风灵弓',cost:{spiritwood:8,iron:5,core:2,stones:90},output:{stormBow:1},realmRequired:1},thunderStaff:{name:'九霄雷杖',cost:{spiritwood:6,iron:4,essence:3,core:2,stones:100},output:{thunderStaff:1},realmRequired:1}};
+  for(const[id,r]of Object.entries(extraRecipes))RECIPES[id]={id,...r,description:`消耗${Object.entries(r.cost).map(([k,v])=>`${RESOURCES[k].name} ${v}`).join('、')}制作。`};
+  for(const t of Object.values(TECHNIQUES))t.preferredWeapon=t.id==='sword'?'sword':t.id==='arrow'?'bow':'staff';
+  ITEMS.contribution={id:'contribution',name:'宗门贡献',type:'currency',grade:'凡品',description:'完成宗门历练所得，可在宗门换取灵材与高阶兵器。'};
+  MAPS.sect=map('sect','青云宗','sect',0,'sect','独立宗门大院：宗主大殿、传功阁、铸兵阁、丹房、藏经亭、灵材库与破境坛。',[],[],[],[],[{id:'worldGate',name:'前往青云山海',x:1600,y:2110,target:'main'}]);
+  MAPS.sect.hub={x:1600,y:1200,radius:1700};MAPS.sect.start={x:1600,y:1800};MAPS.sect.roads=[[[1600,2110],[1600,1200],[1600,760]],[[790,1020],[1200,1200],[1600,1200],[2410,1020]],[[840,1580],[1600,1600],[2360,1580]]];
+  MAPS.sect.npcs=[{id:'master',name:'凌云真人',role:'宗主',skin:'elder',color:'#d9d0b8',x:1600,y:800},{id:'elder',name:'顾清玄',role:'传功长老',skin:'elder',color:'#d6c29a',x:1200,y:940},{id:'disciple',name:'陆青禾',role:'论剑同门',skin:'disciple',color:'#89c9ca',x:2040,y:940},{id:'forge',name:'铸兵阁',role:'兵器锻造',x:790,y:1080},{id:'alchemy',name:'丹房',role:'丹药炼制',x:2410,y:1080},{id:'broker',name:'裴九商',role:'灵材库',skin:'broker',color:'#d8bc79',x:2360,y:1580},{id:'storyteller',name:'藏经守卷人',role:'山海藏经',x:840,y:1580},{id:'hunter',name:'燕孤山',role:'宗门任务',skin:'hunter',color:'#d1a386',interaction:'sect',x:1150,y:1570},{id:'cultivation',name:'太清破境坛',role:'独立修行入口',x:1600,y:1260},{id:'waygate',name:'山海传送阵',x:1600,y:1900}];
+  NPC_CHARACTERS.master={id:'master',name:'凌云真人',role:'宗主',skin:'elder',mapId:'main',x:440,y:1680,color:'#d9d0b8',description:'主持山门与问剑之路的宗主，说明主线、境界和宗门历练。功法细节由顾清玄负责。',dialogue:'“问剑先护山民，修行再问自身。想知道下一步去哪里，来问我；想推敲功法，去找顾长老。”',choices:[{id:'respect',label:'请宗主指出问剑之路',description:'获得 10 灵石，交情 +2。',reward:{stones:10},rapport:2},{id:'practical',label:'准备丹药再出发',description:'获得 1 回春丹，交情 +1。',reward:{potions:1},rapport:1}],services:[]};
+  const EXPLORATION_SITES={
+    lostCamp:{id:'lostCamp',mapId:'main',x:1050,y:1650,kind:'chest',name:'失落营地',description:'被妖兽侵袭的山民营地，遗留下急救药箱。',realmRequired:0,reward:{potions:2,stones:20,xp:70}},
+    ancientTablet:{id:'ancientTablet',mapId:'main',x:600,y:520,kind:'tablet',name:'北山剑碑',description:'风雨侵蚀的古剑碑，仍留有修行者的行剑心得。',realmRequired:0,reward:{iron:3,xp:100}},
+    herbGarden:{id:'herbGarden',mapId:'main',x:1200,y:2100,kind:'garden',name:'山野药畦',description:'早年药师留下的一片药畦，采收后不再重复生长。',realmRequired:0,reward:{herbs:6,spiritTea:1,xp:60}},
+    mountainCache:{id:'mountainCache',mapId:'main',x:1520,y:1000,kind:'chest',name:'行旅秘匣',description:'旧时行商在山路旁藏下的补给匣。',realmRequired:0,reward:{spiritwood:3,stones:30,xp:100}},
+    bambooTablet:{id:'bambooTablet',mapId:'main',x:1870,y:480,kind:'tablet',name:'青竹风痕碑',description:'竹林古碑记载了穿云箭法的一段残章。',realmRequired:1,reward:{arrowBook:1,essence:2,xp:180}},
+    ruinChest:{id:'ruinChest',mapId:'main',x:2730,y:1470,kind:'chest',name:'天门遗藏',description:'石卫巡逻区域里的旧宝藏。',realmRequired:2,reward:{core:2,essence:3,stones:70,xp:300}},
+    ashChest:{id:'ashChest',mapId:'red',x:1000,y:1880,kind:'chest',name:'荒原驿车',description:'被熔风卷落的驿车仍存有未损坏的物资。',realmRequired:1,reward:{ember:4,iron:3,potions:2,xp:200}},
+    flameTablet:{id:'flameTablet',mapId:'red',x:2170,y:770,kind:'tablet',name:'赤霄盟碑',description:'旧盟的刻文使你更了解火脉的呼吸。',realmRequired:1,reward:{essence:2,rageElixir:2,xp:250}},
+    emberGarden:{id:'emberGarden',mapId:'red',x:2810,y:2090,kind:'garden',name:'赤焰药圃',description:'依火脉生长的灵草只可完整采收一次。',realmRequired:1,reward:{ember:5,herbs:5,core:1,xp:220}},
+    frozenCamp:{id:'frozenCamp',mapId:'snow',x:1000,y:2100,kind:'chest',name:'雪原旧营',description:'冰雪下的旧营留下了丹茶与寒晶。',realmRequired:2,reward:{frost:4,potions:2,spiritTea:2,xp:280}},
+    frostTablet:{id:'frostTablet',mapId:'snow',x:2020,y:650,kind:'tablet',name:'北冥誓碑',description:'誓碑记录稳定寒流的方法，读过后留在山海志里。',realmRequired:2,reward:{essence:3,core:2,xp:350}},
+    snowGarden:{id:'snowGarden',mapId:'snow',x:2650,y:1720,kind:'garden',name:'冰莲药畦',description:'深雪中的灵药畦，留下了一次丰厚的收获。',realmRequired:2,reward:{frost:5,herbs:6,wardPowder:2,xp:300}}
+  };
+  const ACTIVITIES={
+    bounty:{id:'bounty',type:'bounty',name:'宗门悬赏',description:'清剿三类妖修，应对近战追击、灵弹远射与重甲敌人；境界越高，对手越强。',realmRequired:1,mapId:'red',firstReward:{xp:1100,contribution:60,stones:70,core:2,essence:2},repeatReward:{xp:450,contribution:20,stones:25},rewardLimit:5},
+    defense:{id:'defense',type:'defense',name:'护脉守护',description:'守住灵脉晶石，击退三波敌人。敌人优先袭击晶石，失守即告失败。',realmRequired:2,mapId:'main',firstReward:{xp:2200,contribution:90,stones:120,core:3,essence:3},repeatReward:{xp:900,contribution:30,stones:40},rewardLimit:4},
+    tower:{id:'tower',type:'tower',name:'镇妖塔',description:'五层不同敌阵；每过一层选剑意、回元或凝神祝福。各层首次奖励独立，登顶才能突破化神。',realmRequired:3,mapId:'main',firstReward:{xp:3000,contribution:150,stones:180,core:4,essence:4},repeatReward:{xp:1400,contribution:45,stones:60},rewardLimit:3},
+    tribulation:{id:'tribulation',type:'tribulation',name:'九霄渡劫',description:'化神后在雷劫场存活。随炼虚、合体递增为二重、三重雷劫；提示范围是真实落雷区域。',realmRequired:4,mapId:'snow',firstReward:{xp:4000,contribution:120,stones:180,core:4,essence:4},repeatReward:{xp:1000,contribution:35,stones:50},rewardLimit:3}
+  };
+  const SECT_SUPPLIES={
+    timber:{id:'timber',name:'宗门草木包',description:'常用草木与药材。',cost:{contribution:20},reward:{herbs:6,spiritwood:3},realmRequired:0},
+    iron:{id:'iron',name:'玄铁补给',description:'用于铸兵和研习。',cost:{contribution:20},reward:{iron:5},realmRequired:0},
+    spirit:{id:'spirit',name:'高阶灵材包',description:'妖丹与灵髓，用于功法晋阶及破境。',cost:{contribution:35},reward:{core:2,essence:2},realmRequired:1},
+    sword:{id:'sword',name:'太清斩仙剑',description:'化神后凭贡献领用高级灵剑。',cost:{contribution:240,stones:160},reward:{heavenSword:1},realmRequired:4},
+    bow:{id:'bow',name:'天罡逐星弓',description:'化神后凭贡献领用高级灵弓。',cost:{contribution:240,stones:160},reward:{celestialBow:1},realmRequired:4},
+    staff:{id:'staff',name:'太虚星辰杖',description:'化神后凭贡献领用高级法杖。',cost:{contribution:240,stones:160},reward:{astralStaff:1},realmRequired:4}
+  };
+  // A technique's grade belongs to its manuscript; practice only raises its learned level.
+  const TECHNIQUE_DIRECTIONS={
+    sword:{id:'sword',name:'御剑',description:'飞剑与近身剑气，适配灵剑。'},
+    arrow:{id:'arrow',name:'灵弓',description:'远射灵箭，选择集束或宽幅箭雨。'},
+    flame:{id:'flame',name:'火法',description:'火球爆裂与灼烧，适配法杖。'},
+    frost:{id:'frost',name:'冰法',description:'穿透冰片与减速，适配法杖。'},
+    wood:{id:'wood',name:'木法',description:'回春与缠根，适配法杖。'},
+    thunder:{id:'thunder',name:'雷法',description:'锁敌连雷与麻痹，适配法杖。'},
+    earth:{id:'earth',name:'土法',description:'护盾、震地与击退，适配法杖。'}
+  };
+  const techniqueNames={
+    sword:['御剑诀','分光剑诀','青莲剑阵','太清御剑','万剑归宗'],
+    arrow:['穿云箭诀','逐风连矢','贯星箭经','落日真诀','九天射日'],
+    flame:['离火焚天','赤炎爆诀','焚脉火典','朱雀真法','大日焚空'],
+    frost:['玄冰凝霜','寒潮冰诀','北冥冰魄','霜天封界','太阴冰轮'],
+    wood:['长春引灵','青藤缠灵','枯荣生息','青帝长生','万木归元'],
+    thunder:['九霄雷引','惊霆连诀','天罡雷经','紫霄御雷','太清劫雷'],
+    earth:['厚土镇岳','岩甲震诀','山岳守心经','地元镇域','玄黄不灭']
+  };
+  const fixedGrades=Object.values(TECHNIQUE_GRADES).sort((a,b)=>a.index-b.index);
+  for(const grade of fixedGrades){
+    grade.realmRequired=grade.index;
+    grade.description=`先天固定${grade.name}，习得后只能研习重数，不能提升品阶。`;
+  }
+  const baseTechniques=Object.values(TECHNIQUES).map(t=>({...t}));
+  for(const base of baseTechniques)for(const grade of fixedGrades){
+    const i=grade.index,id=base.id+(i?'_'+grade.id:''),profile={};
+    let effect;
+    if(base.id==='sword'){profile.projectileCount=[3,4,5,6,7][i];effect=`放出 ${profile.projectileCount} 道飞剑，并斩出近身剑气。`;}
+    else if(base.id==='arrow'){profile.projectileCount=[5,3,5,7,9][i];profile.spread=[.14,.08,.12,.16,.19][i];effect=`${profile.projectileCount} 箭${i===1?'集束':'扇射'}，中央灵箭穿透敌阵。`;}
+    else if(base.id==='frost'){profile.projectileCount=[5,3,5,7,9][i];profile.spread=[.15,.09,.14,.18,.21][i];effect=`发射 ${profile.projectileCount} 枚${i===1?'集束':'扇形'}寒冰碎片，穿透并减速近敌。`;}
+    else if(base.id==='flame'){profile.explosionRadius=[54,64,76,88,100][i];effect=`爆裂火球炸开 ${profile.explosionRadius} 尺范围，灼烧目标，并释放近身炎环。`;}
+    else if(base.id==='wood'){profile.rootDuration=[1.5,1.8,2.2,2.6,3][i];effect=`回春疗伤，缠根基础定身 ${profile.rootDuration} 秒，重数增加可延长，并造成木伤。`;}
+    else if(base.id==='thunder'){profile.chainTargets=[5,3,5,6,8][i];effect=`雷击连锁最多 ${profile.chainTargets} 敌，造成短暂麻痹。`;}
+    else{profile.knockback=[18,22,26,30,36][i];effect=`凝成吸收伤害的护盾，震地并击退近敌 ${profile.knockback} 尺。`;}
+    const cost={contribution:[0,35,80,150,260][i],stones:[0,25,55,95,160][i]};
+    if(i){cost[base.resource]=[0,2,4,6,8][i];if(i>=2)cost.core=i-1;if(i>=3)cost.essence=(cost.essence||0)+i-2;}
+    else{delete cost.contribution;delete cost.stones;}
+    TECHNIQUES[id]={...base,id,name:techniqueNames[base.id][i],baseId:base.id,direction:base.id,directionName:TECHNIQUE_DIRECTIONS[base.id].name,
+      gradeIndex:i,grade:grade.id,gradeName:grade.name,gradeColor:grade.color,power:grade.multiplier,
+      rangeMultiplier:1+i*.06,manaMultiplier:1-grade.manaReduction,cooldownMultiplier:1-grade.cooldownReduction,
+      requiredRealm:grade.realmRequired,requiredTrials:[...grade.trialsRequired],acquireCost:cost,castProfile:profile,
+      preferredWeapon:base.id==='sword'?'sword':base.id==='arrow'?'bow':'staff',
+      description:`${effect} ${grade.name}品阶固定；威力系数 ${grade.multiplier.toFixed(2)}，作用范围系数 ${(1+i*.06).toFixed(2)}。`,
+      acquisition:i?'青云宗藏经：凭境界、秘境见证与贡献换取经卷。':base.id==='sword'?'初入山门已习得，也可在宗门领卷。':base.id==='arrow'?'加入宗门赠卷，或探索青竹风痕碑。':'山海见闻、人物委托、秘境首通或行商购卷。'};
+    const previous=ITEMS[id+'Book'];
+    add(id+'Book',TECHNIQUES[id].name+'经卷','book',grade.name,`研读后习得${TECHNIQUES[id].name}一重，${grade.name}品阶固定。`,
+      {technique:id,...(!i&&previous?.price?{price:previous.price}:{})});
+  }
+  NPC_CHARACTERS.elder.description='掌管青云宗传承的长老。各门功法先天分黄、玄、地、天、仙五阶，研习可提升重数；高阶经卷须凭历练获取。';
+  NPC_CHARACTERS.elder.dialogue='“重数靠勤修，品阶由经卷决定。凡法不能炼成仙法；先在山海历练，再到藏经阁寻适合你的传承。”';
+  NPC_CHARACTERS.elder.choices[0].label='请长老指点功法搭配';
+  SECT_SUPPLIES.spirit.description='妖丹与灵髓，用于高阶功法研习、购卷与破境。';
+  const SECT_POSITIONS={east:{id:'east',label:'东方木位',element:'wood'},south:{id:'south',label:'南方火位',element:'fire'},center:{id:'center',label:'中央土位',element:'earth'},west:{id:'west',label:'西方金位',element:'metal'},north:{id:'north',label:'北方水位',element:'water'}};
+  const SECT_FACILITIES={
+    garden:{id:'garden',name:'灵药田',description:'弟子照料药畦，生产灵草与灵木；木位相契。',preferredElement:'wood',position:'east',duration:45,reward:{herbs:3,spiritwood:1}},
+    forge:{id:'forge',name:'宗门锻坊',description:'弟子收束炉火，生产玄铁与赤焰砂；金位相契。',preferredElement:'metal',position:'west',duration:60,reward:{iron:2,ember:1}},
+    library:{id:'library',name:'藏经阁',description:'弟子整理古卷，提供修为与灵髓；水位相契。',preferredElement:'water',position:'north',duration:75,reward:{xp:55,essence:1}}
+  };
+  const SECT_DISCIPLES={qinghe:{id:'qinghe',name:'陆青禾',element:'wood',realmRequired:0,recruitCost:{}},yanming:{id:'yanming',name:'沈炎明',element:'fire',realmRequired:2,recruitCost:{contribution:45,stones:40}},ruoshui:{id:'ruoshui',name:'林若水',element:'water',realmRequired:3,recruitCost:{contribution:70,stones:60}}};
+  return{MAPS,TECHNIQUES,TECHNIQUE_DIRECTIONS,TECHNIQUE_GRADES,NPC_CHARACTERS,WEAPON_TYPES,EXPLORATION_SITES,ACTIVITIES,SECT_SUPPLIES,SECT_POSITIONS,SECT_FACILITIES,SECT_DISCIPLES,ROOT_GRADES,ELEMENTS,RESOURCES,ITEMS,RECIPES,STORY,SIDE_QUESTS,TRIAL_REWARDS};
 });

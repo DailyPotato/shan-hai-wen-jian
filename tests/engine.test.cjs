@@ -134,7 +134,7 @@ test('spectral swords travel beyond melee range, retain collision after save and
   const restored=X.deserialize(X.serialize(s));
   tick(s,{},0.7);tick(restored,{},0.7);
   assert.ok(target.hp<target.maxHp);
-  assert.ok(Math.abs(target.hp-(target.maxHp-X.stats(s).attack*1.8))<1e-8);
+  assert.ok(Math.abs(target.hp-(target.maxHp-X.stats(s).attack*X.techniqueInfo(s).multiplier*1.8))<1e-8);
   assert.equal(restored.enemies[0].hp,target.hp);
   assert.equal(s.player.hp,120,'Friendly swords cannot hurt their caster');
   const wall=quiet(),behind=wall.enemies[0];

@@ -33,7 +33,7 @@ jobs:
         run: |
           mkdir -p _site/assets
           cp index.html style.css content.js engine.js renderer.js app.js .nojekyll _site/
-          cp assets/favicon.svg assets/cover.png assets/pine.png assets/cultivator.png _site/assets/
+          cp assets/favicon.svg assets/cover.png assets/pine.png assets/cultivator.png assets/sect-hall.png assets/cultivator-bow.png assets/cultivator-staff.png _site/assets/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
