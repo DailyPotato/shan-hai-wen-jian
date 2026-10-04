@@ -13,7 +13,7 @@ const worlds=w=>Object.fromEntries(Object.entries(w).map(([id,v])=>[id,{nodes:v.
 
 test('authentic v4 save migrates strictly to v5 with all earned data intact and no granted new choices',()=>{
   assert.equal(crypto.createHash('sha256').update(V4).digest('hex'),'65185670d4d76a56a222067f5bbcfb1ce7420e7919337db9561aca7cf6200fd4');
-  const old=JSON.parse(V4),s=fresh(),next=JSON.parse(X.serialize(s));assert.equal(s.version,5);assert.deepEqual(s.dao,{learned:[]});assert.equal(s.alchemy,null);
+  const old=JSON.parse(V4),s=fresh(),next=JSON.parse(X.serialize(s));assert.equal(s.version,7);assert.deepEqual(s.dao,{learned:[]});assert.equal(s.alchemy,null);
   for(const k of Object.keys(old))if(!['version','worlds'].includes(k))assert.deepEqual(next[k],old[k],k);assert.deepEqual(worlds(next.worlds),worlds(old.worlds));assert.equal(X.daoInfo(s).earnedPoints,20);assert.equal(X.daoInfo(s).spentPoints,0);
   roundtrip(s);
   for(const [label,mutate] of [['realm',d=>d.player.realm=8],['facility',d=>d.sect.facilities.garden.level=4],['records',d=>d.sect.records.tower=-1],['exploration',d=>d.exploration.claimed.push('missing')],['worlds',d=>d.worlds.main.enemies.pop()],['inventory',d=>d.inventory.missingItem=1],['grades',d=>d.techniqueGrades.arrow_immortal=0],['combo',d=>d.combo.until=d.time+7]]){const bad=structuredClone(old);mutate(bad);assert.throws(()=>X.deserialize(JSON.stringify(bad)),label);}

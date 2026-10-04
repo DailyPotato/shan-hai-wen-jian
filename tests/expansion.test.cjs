@@ -50,7 +50,7 @@ function graph(m,start){
 test('content loads in Node and a browser and describes real usable systems',()=>{
   const browser={};vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../content.js'),'utf8'),browser);
   assert.deepEqual(Object.keys(browser.XianContent.MAPS),Object.keys(C.MAPS));
-  assert.deepEqual(Object.keys(C.MAPS).sort(),['main','red','snow','bambooTrial','fireTrial','iceTrial','sect'].sort());
+  assert.deepEqual(Object.keys(C.MAPS).sort(),['main','red','snow','bambooTrial','fireTrial','iceTrial','sect','mistTown','tidePort','buriedPalace','skyRuins'].sort());
   assert.deepEqual(Object.keys(C.TECHNIQUE_DIRECTIONS).sort(),['sword','flame','frost','wood','thunder','earth','arrow'].sort());
   assert.equal(Object.keys(C.TECHNIQUES).length,35);
   assert.equal(Object.keys(C.ROOT_GRADES).length,5);assert.equal(Object.keys(C.ELEMENTS).length,8);
@@ -245,7 +245,7 @@ test('travel honors realm and physical portal gates and each map retains its own
     assert.ok(world.drops.some(d=>d.amount===7&&d.x===3000&&d.y===2300));
   }
   hub(restored);X.action(restored,'travel:red');assert.equal(restored.enemies,restored.worlds.red.enemies);assert.equal(restored.nodes,restored.worlds.red.nodes);
-  restored.player.hp=0;restored.dead=true;X.action(restored,'revive');assert.equal(restored.mapId,'main');assert.equal(restored.dead,false);assert.equal(X.isSafe(restored),true);assert.equal(restored.progress.visited.length,6);
+  restored.player.hp=0;restored.dead=true;X.action(restored,'revive');assert.equal(restored.mapId,'main');assert.equal(restored.dead,false);assert.equal(X.isSafe(restored),true);assert.equal(restored.progress.visited.length,10);
 });
 
 test('three-wave trials advance only after combat, grant unique first rewards and cap repeat gifts',()=>{

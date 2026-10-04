@@ -16,7 +16,7 @@ const permanentWorlds=worlds=>Object.fromEntries(Object.entries(worlds).map(([id
 
 test('authentic v3 migration preserves the earned NPC, immortal technique, gear and every permanent world',()=>{
   assert.equal(crypto.createHash('sha256').update(V3).digest('hex'),'a7707f367a3a2eff03bc1d240ecd0f5eb4ab4d7ff1b23ddb82534a78851576ab');
-  const old=JSON.parse(V3),s=X.deserialize(V3),next=JSON.parse(X.serialize(s));assert.equal(s.version,5);
+  const old=JSON.parse(V3),s=X.deserialize(V3),next=JSON.parse(X.serialize(s));assert.equal(s.version,7);
   for(const k of ['root','npcProgress','inventory','equipment','buffs','story','progress','trials','projectiles','quests','questRewards','won','dead','meditationCd','seed','rng','time'])assert.deepEqual(next[k],old[k],k);
   for(const k of Object.keys(old.player))assert.deepEqual(next.player[k],old.player[k],k);
   for(const [id,level]of Object.entries(old.techniques)){const grade=old.techniqueGrades[id],suffix=['','_mystic','_earth','_heaven','_immortal'][grade],mapped=id+suffix;assert.equal(next.techniques[mapped],level);assert.equal(X.techniqueInfo(s,mapped).gradeIndex,grade);}
@@ -32,7 +32,7 @@ test('authentic v3 migration preserves the earned NPC, immortal technique, gear 
 test('eight cultivation realms are ordered with real growth and seven persistent maps retain legacy terrain',()=>{
   assert.deepEqual(X.REALMS.map(r=>r.realmName),['炼气','筑基','金丹','元婴','化神','炼虚','合体','大乘']);
   for(let i=0;i<X.REALMS.length;i++){const r=X.REALMS[i];assert.ok(r.maxHp>0&&r.maxMp>0&&r.attack>0);if(i<7)assert.ok(r.xpNeeded>0);if(i){assert.ok(r.maxHp>X.REALMS[i-1].maxHp);assert.ok(r.maxMp>X.REALMS[i-1].maxMp);assert.ok(r.attack>X.REALMS[i-1].attack);}}
-  assert.equal(Object.keys(C.MAPS).length,7);assert.ok(C.MAPS.sect);assert.ok(C.TECHNIQUES.arrow);
+  assert.equal(Object.keys(C.MAPS).length,11);assert.ok(C.MAPS.sect);assert.ok(C.TECHNIQUES.arrow);
   for(const id of ['main','red','snow','bambooTrial','fireTrial','iceTrial']){const m=C.MAPS[id],old=JSON.parse(V3).worlds[id];assert.equal(m.nodes.length,old.nodes.length);assert.equal(m.spawns.length,old.enemies.length);}
   const s=X.createGame(621);checked(s,'travel:sect');assert.equal(s.mapId,'sect');assert.equal(X.isSafe(s),true);
   for(const p of [{x:80,y:80},{x:3100,y:80},{x:80,y:2300},{x:3100,y:2300}]){if(blocked(C.MAPS.sect,p.x,p.y))continue;Object.assign(s.player,p);assert.equal(X.isSafe(s),true);}

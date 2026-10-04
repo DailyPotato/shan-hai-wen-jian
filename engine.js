@@ -1,10 +1,14 @@
 (function (root, factory) {
   'use strict';
-  const api = factory(typeof module === 'object' && module.exports ? require('./content.js') : root.XianContent);
+  const node=typeof module === 'object' && module.exports;
+  const api = factory(node ? require('./content.js') : root.XianContent,node?require('./journey.js'):root.XianJourney,node?require('./workshop.js'):root.XianWorkshop,node?require('./worldlife.js'):root.XianWorldlife);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.Xian = api;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (CONTENT) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (CONTENT,createJourney,createWorkshop,createWorldlife) {
   'use strict';
+  const LEGACY_ITEM_IDS=new Set(Object.keys(CONTENT.ITEMS));
+  const LEGACY_MAP_IDS=Object.keys(CONTENT.MAPS).filter(id=>!CONTENT.EXPANSION_MAP_IDS.includes(id));
+  let journey,workshop,worldlife;
 
   const WIDTH = 3200, HEIGHT = 2400;
   const HUB = { x: 500, y: 1800, radius: 340 };
@@ -57,6 +61,9 @@
     sectSentinel:{...ENEMY.guardian,name:'镇妖塔主',hp:3400,damage:30,xp:120,stones:40,realm:0,skin:'guardian',element:'thunder',style:'ice'},
     sectBounty:{...ENEMY.wolfKing,name:'悬赏妖修',hp:1200,damage:23,xp:100,stones:25,realm:0,skin:'wolf',element:'fire',style:'flame'}
   });
+  Object.assign(ENEMY,CONTENT.EXPANSION_ENEMIES);
+  Object.assign(ENEMY.flameWolf,{name:'赤焰火蜥',bodyKind:'salamander',behavior:'salamander',description:'近身喷出双股火舌。'});Object.assign(ENEMY.flameSpirit,{name:'灯焰妖',bodyKind:'lantern',behavior:'lantern',description:'灯芯蓄火后六向环射。'});Object.assign(ENEMY.lavaGolem,{name:'熔炉傀儡',bodyKind:'furnace',behavior:'furnace',description:'以自身为中心释放热浪，近身须退开。'});
+  Object.assign(ENEMY.iceWolf,{name:'霜角灵鹿',bodyKind:'stag',behavior:'stag',description:'角尖预告后短程突撞，实际命中附带减速。'});Object.assign(ENEMY.iceSpirit,{name:'雪面狐灵',bodyKind:'fox',behavior:'fox',description:'两道错开的冰刃从侧面封路。'});Object.assign(ENEMY.iceGolem,{name:'六臂冰魁',bodyKind:'iceColossus',behavior:'sixarm',description:'六只冰拳向六个方向短距离击出。'});
   const SPAWNS = [
     ['wolf', 985, 1700], ['wolf', 1100, 2010], ['wolf', 1390, 2110], ['wolf', 920, 1350],
     ['wolf', 1200, 1320], ['wolf', 1680, 1370], ['wolf', 1830, 1570], ['wolf', 680, 1120],
@@ -86,6 +93,7 @@
     const id = state ? requestedId || state.mapId || 'main' : stateOrId;
     const m = CONTENT.MAPS[id] || CONTENT.MAPS.main;
     if(state&&state.activity&&!requestedId){const a=state.activity,source=CONTENT.MAPS[a.mapId];return{...source,id:'activity:'+a.type,sourceMapId:a.mapId,name:CONTENT.ACTIVITIES[a.type].name,type:'activity',hub:{x:500,y:1800,radius:0},safeAreas:[],ponds:[],obstacles:[],start:{x:1550,y:1400},arena:{x:1700,y:1200,radius:500},npcs:[],portals:[],activity:activityInfo(state),crystal:a.crystal||null,unlocked:true,visited:true,trial:null};}
+    if(state&&state.journey&&state.journey.active&&!requestedId){const a=state.journey.active,r=CONTENT.ROUTES[a.id];return{...m,id:'journey:'+a.id,sourceMapId:r.mapId,name:r.name,type:'expedition',hub:{x:500,y:1800,radius:0},safeAreas:[],ponds:[],obstacles:[],npcs:[],portals:[],trial:null,crystal:a.objective,roads:[[[550,1780],...r.stations.map(s=>[s.x,s.y])]],unlocked:true,visited:true};}
     return state ? {...m,unlocked:state.player.realm>=m.realmRequired,visited:!!state.progress&&state.progress.visited.includes(m.id),trial:state.trials&&state.trials[m.id]||null} : m;
   }
 
@@ -110,7 +118,7 @@
     const learnRequirements=(t.requiredTrials||[]).map(id=>CONTENT.MAPS[id].name+'首通'),baseReason=state.dead?'先重聚灵身。':!isSafe(state)?'请返回安全驿站。':level?'已习得此法。':state.player.realm<t.requiredRealm?`需要${REALMS[t.requiredRealm].realmName}境。`:(t.requiredTrials||[]).some(id=>!state.trials[id].rewarded)?'需完成 '+learnRequirements.join('、')+'。':'';
     const learnReason=baseReason||!(state.inventory[id+'Book']>0)&&'缺少对应经卷。'||'',acquireReason=baseReason||sectReason(state)||state.inventory[id+'Book']>0&&'背包已有此经卷。'||!canPay(state,t.acquireCost||{})&&'需要 '+costText(t.acquireCost)+'。'||'';
     const dao=daoEffects(state),comboElement=t.element==='ice'?'water':Object.keys(GENERATES).includes(t.element)?t.element:null,comboReady=!!comboElement&&state.combo&&state.combo.until>state.time&&GENERATES[state.combo.element]===comboElement;
-    return {...t,level,known:level>0,maxLevel:3,affinity,multiplier:(1+affinity)*(1+Math.max(0,level-1)*.22)*grade.multiplier*weaponBonus*(1+blessings.blade*.08),manaCost:Math.max(12,Math.floor(Math.floor((t.manaCost-(direct&&!r.legacy?2:0))*(1-grade.manaReduction))*dao.spellMana)),cooldown:Math.max(3,(t.cooldown-Math.max(0,level-1)*.4)*(1-grade.cooldownReduction)*(1-blessings.spirit*.06)),trainCost:level===1?{stones:45,[t.resource]:3,herbs:2}:{stones:110,[t.resource]:6,core:2},trainRealm:level>=2?1:0,grade:grade.id,gradeName:grade.name,gradeColor:grade.color,gradeIndex,gradeMultiplier:grade.multiplier,preferredWeapon,weaponCompatible,weaponBonus,comboElement,comboReady,comboMultiplier:comboReady?1.25:1,comboWindow:dao.comboWindow,comboRefund:dao.comboRefund,learnRealm:t.requiredRealm,learnRequirements,canLearn:!learnReason,learnReason,canAcquire:!acquireReason,acquireReason,source:t.acquisition,canPromote:false,promoteReason:'功法品阶由经卷固定，不能提升品阶。',promoteCost:null};
+    return {...t,level,known:level>0,maxLevel:3,affinity,multiplier:(1+affinity)*(1+Math.max(0,level-1)*.22)*grade.multiplier*weaponBonus*(1+blessings.blade*.08),manaCost:Math.max(12,Math.floor(Math.floor((t.manaCost-(direct&&!r.legacy?2:0))*(1-grade.manaReduction))*dao.spellMana*(worldlife?worldlife.effects(state).spellMana:1))),cooldown:Math.max(3,(t.cooldown-Math.max(0,level-1)*.4)*(1-grade.cooldownReduction)*(1-blessings.spirit*.06)),trainCost:level===1?{stones:45,[t.resource]:3,herbs:2}:{stones:110,[t.resource]:6,core:2},trainRealm:level>=2?1:0,grade:grade.id,gradeName:grade.name,gradeColor:grade.color,gradeIndex,gradeMultiplier:grade.multiplier,preferredWeapon,weaponCompatible,weaponBonus,comboElement,comboReady,comboMultiplier:comboReady?1.25:1,comboWindow:dao.comboWindow,comboRefund:dao.comboRefund,learnRealm:t.requiredRealm,learnRequirements,canLearn:!learnReason,learnReason,canAcquire:!acquireReason,acquireReason,source:t.acquisition,canPromote:false,promoteReason:'功法品阶由经卷固定，不能提升品阶。',promoteCost:null};
   }
 
   function weaponInfo(state){const itemId=state.equipment&&state.equipment.weapon||'starterSword',item=CONTENT.ITEMS[itemId],kind=item.weaponKind||'sword',type=CONTENT.WEAPON_TYPES[kind],dao=daoEffects(state);return{...type,id:kind,itemId,name:item.name,kind,range:type.range+(kind==='sword'?dao.swordRangeBonus:0),cooldown:type.cooldown*(kind==='sword'?dao.swordCooldown:kind==='bow'?dao.bowCooldown:1),damageMultiplier:type.damageMultiplier*(kind==='sword'?dao.swordDamage:kind==='bow'?dao.bowDamage:1),projectileSpeed:type.projectileSpeed*(kind==='bow'?dao.bowSpeed:1),pierce:kind==='bow'?dao.bowPierce:0,leech:kind==='sword'?dao.swordLeech:0,leechCap:dao.swordLeechCap,compatibleTechniques:Object.values(CONTENT.TECHNIQUES).filter(t=>t.preferredWeapon===kind).map(t=>t.id)};}
@@ -121,7 +129,9 @@
     if(!terminal&&index===3)requirements.push({id:'tower',label:'镇妖塔五层首通',current:state.sect.towerBest,target:5,met:state.sect.towerBest>=5});
     if(!terminal&&index>=4)requirements.push({id:'tribulation',label:`完成第 ${index-3} 重雷劫`,current:state.sect.tribulationBest,target:index-3,met:state.sect.tribulationBest>=index-3});
     let reason=terminal?'已达大乘境。':state.dead?'先重聚灵身。':!isSafe(state)?'请在安全驿站或宗门修行。':requirements.some(r=>!r.met)?requirements.find(r=>!r.met).label:state.player.xp<REALMS[index].xpNeeded?`修为需要 ${REALMS[index].xpNeeded}，当前 ${Math.floor(state.player.xp)}。`:!canPay(state,cost)?'破境需要 '+costText(cost)+'。':'';
-    return{realmIndex:index,realmName:REALMS[index].realmName,nextRealmName:terminal?null:REALMS[index+1].realmName,xp:state.player.xp,xpNeeded:REALMS[index].xpNeeded,maxRealm:terminal,maxRealmIndex:REALMS.length-1,realmCount:REALMS.length,requirements,ready:!reason,reason,cost,unlocks:Object.values(CONTENT.ACTIVITIES).filter(m=>m.realmRequired===index+1).map(m=>({id:m.id,name:m.name,description:m.description}))};
+    const preparation=journey&&state.journey?journey.foundation(state):0,xpNeeded=Math.ceil(REALMS[index].xpNeeded*(1-preparation));if(!terminal&&preparation&&!requirements.some(r=>!r.met)&&isSafe(state)&&!state.dead&&canPay(state,cost))reason=state.player.xp<xpNeeded?`修为需要 ${xpNeeded}，当前 ${Math.floor(state.player.xp)}。`:'';
+    if(state.journey&&state.journey.active||state.journey&&state.journey.retreat)reason='先结束路线或收取闭关心得。';
+    return{realmIndex:index,realmName:REALMS[index].realmName,nextRealmName:terminal?null:REALMS[index+1].realmName,xp:state.player.xp,xpNeeded,preparation,maxRealm:terminal,maxRealmIndex:REALMS.length-1,realmCount:REALMS.length,requirements,ready:!reason,reason,cost,unlocks:Object.values(CONTENT.ACTIVITIES).filter(m=>m.realmRequired===index+1).map(m=>({id:m.id,name:m.name,description:m.description}))};
   }
 
   function promotionInfo(state,id,target){
@@ -154,7 +164,10 @@
     for(const item of Object.values(state.equipment||{})){const eq=CONTENT.ITEMS[item];if(eq&&eq.stats)for(const [k,v]of Object.entries(eq.stats))s[k]=(s[k]||0)+v;}
     const directions={};for(const[id,level]of Object.entries(state.techniques||{})){const t=CONTENT.TECHNIQUES[id];if(t){const key=t.baseId||id;if(!directions[key]||level>directions[key].level)directions[key]={t,level};}}
     for(const{t,level}of Object.values(directions))if(level>1){const bonus=(level-1)*({attack:2,maxMp:6,maxHp:10,speed:4,defense:1}[t.passive]||0);s[t.passive]=(s[t.passive]||0)+bonus;}
-    if((state.buffs||[]).some(b=>b.type==='rage'))s.attack*=1.25;
+    const craftingBonus=workshop&&state.workshop?workshop.bonuses(state):{stats:{},attackMultiplier:1};for(const[k,v]of Object.entries(craftingBonus.stats||{}))s[k]=(s[k]||0)+v;
+    if(journey&&state.journey)for(const[k,v]of Object.entries(journey.bonuses(state)))s[k]=(s[k]||0)+v;
+    if(worldlife&&state.worldlife)for(const[k,v]of Object.entries(worldlife.bonuses(state)))s[k]=(s[k]||0)+v;
+    if((state.buffs||[]).some(b=>b.type==='rage'))s.attack*=1.25;s.attack*=craftingBonus.attackMultiplier||1;
     return s;
   }
 
@@ -213,7 +226,7 @@
   }
 
   function expand(state,legacy) {
-    state.version=5;state.mapId='main';state.worlds={};state.progress={visited:['main'],bosses:state.quests.bosses.slice(),gathered:{},claims:[]};
+    state.version=7;state.mapId='main';state.worlds={};state.progress={visited:['main'],bosses:state.quests.bosses.slice(),gathered:{},claims:[]};
     state.trials={};for(const m of Object.values(CONTENT.MAPS))if(m.type==='trial')state.trials[m.id]={wave:1,cleared:false,clears:0,rewarded:false};
     let n=(state.seed^0x9e3779b9)>>>0;n^=n<<13;n^=n>>>17;n^=n<<5;const pick=(n>>>0)%100;
     let grade='mortal',sum=0;for(const g of Object.values(CONTENT.ROOT_GRADES)){sum+=g.weight;if(pick<sum){grade=g.id;break;}}
@@ -233,10 +246,10 @@
 
   function createGame(seed=123){return expand(createLegacy(seed),false);}
 
-  function gainXp(state,value){const bonus=state.root?CONTENT.ROOT_GRADES[state.root.grade].cultivation:1;state.player.xp+=value*bonus*((state.buffs||[]).some(b=>b.type==='insight')?1.3:1);}
+  function gainXp(state,value){const bonus=state.root?CONTENT.ROOT_GRADES[state.root.grade].cultivation:1;state.player.xp+=value*bonus*((state.buffs||[]).some(b=>b.type==='insight')?1.3:1)*(workshop&&state.workshop?workshop.cultivationMultiplier(state):1)*(journey&&state.journey?journey.cultivationMultiplier(state):1)*(worldlife?worldlife.effects(state).xp:1);}
   function grant(state,reward){for(const [id,count]of Object.entries(reward)){if(id==='xp')gainXp(state,count);else if(id==='contribution'){state.sect.contribution+=count;state.sect.totalContribution+=count;}else if(id in state.player)state.player[id]+=count;else state.inventory[id]=(state.inventory[id]||0)+count;}}
-  function canPay(state,cost){return Object.entries(cost).every(([id,n])=>(id==='contribution'?state.sect.contribution:state.player[id]||0)>=n);}
-  function pay(state,cost){for(const [id,n]of Object.entries(cost)){if(id==='contribution')state.sect.contribution-=n;else state.player[id]-=n;}}
+  function canPay(state,cost){return Object.entries(cost).every(([id,n])=>(id==='contribution'?state.sect.contribution:id in state.player?state.player[id]:state.inventory[id]||0)>=n);}
+  function pay(state,cost){for(const [id,n]of Object.entries(cost)){if(id==='contribution')state.sect.contribution-=n;else if(id in state.player)state.player[id]-=n;else state.inventory[id]-=n;}}
   function costText(cost){return Object.entries(cost).map(([id,n])=>`${(CONTENT.RESOURCES[id]||CONTENT.ITEMS[id]||{name:id}).name} ${n}`).join('、');}
 
   const GENERATES={wood:'fire',fire:'earth',earth:'metal',metal:'water',water:'wood'};
@@ -245,6 +258,7 @@
     for(const f of Object.values(CONTENT.SECT_FACILITIES))state.sect.facilities[f.id]={level:0,position:f.position,discipleId:null,progress:0,stored:0};
     for(const d of Object.values(CONTENT.SECT_DISCIPLES))state.sect.disciples[d.id]={recruited:false};
     state.activity=null;state.exploration={claimed:[],records:{}};state.secondaryTechnique=null;state.player.secondaryCd=0;state.combo={element:null,until:0};state.legacyTechniqueIds=[];state.dao={learned:[]};state.alchemy=null;
+    if(journey)journey.init(state);if(workshop)workshop.init(state);if(worldlife)worldlife.init(state);
   }
   function sectReason(state){return state.dead?'先重聚灵身。':state.activity?'先结束当前历练。':state.mapId!=='sect'||!isSafe(state)?'请返回青云宗大院。':!state.sect.joined?'先加入青云宗。':'';}
   function daoEffects(state){
@@ -311,7 +325,7 @@
     const disciples=Object.values(CONTENT.SECT_DISCIPLES).map(d=>{const recruited=state.sect.disciples[d.id].recruited,assignedTo=Object.keys(state.sect.facilities).find(id=>state.sect.facilities[id].discipleId===d.id)||null,r=reason||recruited&&'此弟子已经加入。'||state.player.realm<d.realmRequired&&`需要${REALMS[d.realmRequired].realmName}境。`||!canPay(state,d.recruitCost)&&'需要 '+costText(d.recruitCost)+'。'||'';return{...d,recruited,assignedTo,canRecruit:!r,recruitReason:r};});
     return{joined:state.sect.joined,inSect,safe:isSafe(state),canJoin:!joinReason,reason:joinReason,rank,rankName:['记名弟子','内门弟子','真传弟子','山门长老'][rank],contribution:state.sect.contribution,totalContribution:state.sect.totalContribution,missions,supplies,facilities:Object.keys(CONTENT.SECT_FACILITIES).map(id=>facilityInfo(state,id)),disciples};
   }
-  function productionStep(state,dt){if(!state.sect.joined||state.dead)return;for(const id of Object.keys(CONTENT.SECT_FACILITIES)){const f=facilityInfo(state,id),v=state.sect.facilities[id];if(!f.producing)continue;v.progress+=dt;while(v.progress>=f.duration&&v.stored<3){v.progress-=f.duration;v.stored++;}if(v.stored>=3)v.progress=0;}}
+  function productionStep(state,dt){if(!state.sect.joined||state.dead||state.management&&state.management.enabled)return;for(const id of Object.keys(CONTENT.SECT_FACILITIES)){const f=facilityInfo(state,id),v=state.sect.facilities[id];if(!f.producing)continue;v.progress+=dt;while(v.progress>=f.duration&&v.stored<3){v.progress-=f.duration;v.stored++;}if(v.stored>=3)v.progress=0;}}
   function siteInfo(state,id){const s=CONTENT.EXPLORATION_SITES[id];if(!s)return null;const claimed=state.exploration.claimed.includes(id),near=!state.activity&&state.mapId===s.mapId&&distance(s,state.player)<=105,reason=state.dead?'先重聚灵身。':claimed?'此遗迹已经探索。':!near?'请靠近遗迹再探索。':state.player.realm<s.realmRequired?`需要${REALMS[s.realmRequired].realmName}境。`:'';return{...s,claimed,near,available:!reason,reason};}
   function activityInfo(state){
     const a=state.activity;if(!a)return null;const c=CONTENT.ACTIVITIES[a.type];
@@ -325,6 +339,7 @@
   }
   function bindActivityWorld(state){const w=state.activity.world;state.enemies=w.enemies;state.nodes=w.nodes;state.drops=w.drops;}
   function startActivity(state,type){
+    if(state.journey&&(state.journey.active||state.journey.retreat))return outcome(state,'sect:mission:'+type,false,'先结束路线或收取闭关心得。');
     const m=sectInfo(state).missions.find(m=>m.id===type);if(!m||!m.available)return outcome(state,'sect:mission:'+type,false,m&&m.reason||'未知历练。');
     state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};
     const rank=type==='tribulation'?clamp(state.player.realm-3,1,3):1;
@@ -381,6 +396,7 @@
     if(['supply','exchange'].includes(key)&&parts.length===3){const s=sectInfo(state).supplies.find(s=>s.id===arg);if(!s||!s.available)return outcome(state,id,false,s&&s.reason||'未知补给。');pay(state,s.cost);grant(state,s.reward);return outcome(state,id,true,`领用${s.name}。`);}
     if(key==='recruit'&&parts.length===3){const d=sectInfo(state).disciples.find(d=>d.id===arg);if(!d||!d.canRecruit)return outcome(state,id,false,d&&d.recruitReason||'未知弟子。');pay(state,d.recruitCost);state.sect.disciples[arg].recruited=true;return outcome(state,id,true,`${d.name}已加入，五行灵根为${CONTENT.ELEMENTS[d.element].name}。`);}
     const f=CONTENT.SECT_FACILITIES[arg],v=state.sect.facilities[arg];if(!f)return outcome(state,id,false,'未知宗门设施。');
+    if(state.management&&state.management.enabled&&key==='position')return outcome(state,id,false,'已启用庭院调度，请在五行庭院调整独占方位。');
     if(key==='upgrade'&&parts.length===3){const info=facilityInfo(state,arg);if(!info.canUpgrade)return outcome(state,id,false,info.upgradeReason);pay(state,info.upgradeCost);v.level++;return outcome(state,id,true,`${f.name}升至${v.level}级。安排弟子后开始生产。`);}
     if(key==='claim'&&parts.length===3){const info=facilityInfo(state,arg);if(!info.canClaim)return outcome(state,id,false,info.claimReason);grant(state,info.claimReward);v.stored=0;return outcome(state,id,true,`${f.name}积存成果已领取。`);}
     if(key==='position'&&parts.length===4&&CONTENT.SECT_POSITIONS[last]){if(v.position===last)return outcome(state,id,false,'已经位于此方位。');v.position=last;v.progress=0;return outcome(state,id,true,`${f.name}调整至${CONTENT.SECT_POSITIONS[last].label}，本批进度重新开始。`);}
@@ -417,6 +433,7 @@
   }return entries;}
 
   function travel(state,target){
+    if(state.journey&&(state.journey.active||state.journey.retreat))return outcome(state,'travel:'+target,false,'先结束路线或收取闭关心得。');
     if(state.activity)return outcome(state,'travel:'+target,false,'先退出当前宗门历练。');
     const m=CONTENT.MAPS[target];if(!m)return outcome(state,'travel:'+target,false,'山海图上没有此地。');
     if(state.dead)return outcome(state,'travel:'+target,false,'先重聚灵身，再行远游。');
@@ -431,6 +448,7 @@
     state.player.x=m.start.x;state.player.y=m.start.y;state.player.dashTime=0;state.player.invuln=Math.max(state.player.invuln,1);
     state.projectiles=[];state.effects=[];state.interaction=null;
     if(!state.progress.visited.includes(target))state.progress.visited.push(target);
+    if(worldlife)worldlife.onVisit(state,target);
     updateGates(state);effect(state,'particle',state.player.x,state.player.y,.7,16,{color:'#c5e4da'});
     return outcome(state,'travel:'+target,true,`已抵达${m.name}。${m.type==='trial'?'三重试炼开始，可随时从入口退出。':'驿站安全，地图上的灵脉与妖兽可供历练。'}`);
   }
@@ -619,6 +637,9 @@
     const p = state.player;
     if (state.dead || p.invuln > 0 || isSafe(state)) return false;
     amount=Math.max(1,amount-stats(state).defense);if(state.buffs.some(b=>b.type==='ward'))amount*=.75;
+    if(workshop&&state.workshop)amount*=workshop.incomingMultiplier(state);if(journey&&state.journey)amount*=journey.incomingMultiplier(state);
+    if(worldlife)amount*=worldlife.effects(state).incoming;
+    const shieldBefore=p.shield;if(journey&&state.journey)journey.hurt(state,shieldBefore);
     if(p.shield>0){const absorbed=Math.min(p.shield,amount);p.shield-=absorbed;amount-=absorbed;effect(state,'shield',p.x,p.y,.3,38,{color:'#d7bb87'});}
     p.hp = Math.max(0, p.hp - amount); p.invuln = 0.55; p.hit = 0.2;
     effect(state, 'damage', p.x, p.y - 38, 0.7, 0, { amount: Math.round(amount), color: '#fa998b' });
@@ -629,14 +650,20 @@
     }
     if (p.hp <= 0) {
       state.dead = true; state.interaction = null; p.dashTime = 0;
+      if(journey)journey.death(state);
       log(state, '道途未尽。在归元祠重聚灵身，可保留境界与装备。');
     }
     return true;
   }
 
-  function hurtEnemy(state, enemy, damage, push) {
+  function hurtEnemy(state, enemy, damage, push, context={kind:'normal'}) {
     if (enemy.hp <= 0 || enemy.gated) return;
     if(state.activity&&state.activity.type==='tower'&&state.activity.stage===4)damage*=.7;
+    if(journey&&state.journey)damage=journey.hit(state,enemy,damage,context);
+    if(worldlife){const e=worldlife.effects(state);if(context.element==='fire')damage*=e.fireDamage;if(context.element==='ice')damage*=e.iceDamage;}
+    const behavior=ENEMY[enemy.type].behavior;
+    if(behavior==='brace'&&enemy.mode==='windup')damage*=.3;
+    if(behavior==='guard'&&context.kind!=='dot'){const toward=Math.atan2(state.player.y-enemy.y,state.player.x-enemy.x),diff=Math.atan2(Math.sin(toward-enemy.facing),Math.cos(toward-enemy.facing));if(Math.abs(diff)<Math.PI*.55)damage*=.5;}
     enemy.hp = Math.max(0, enemy.hp - damage); enemy.hit = 0.18;
     effect(state, 'damage', enemy.x, enemy.y - enemy.radius - 12, 0.65, 0, { amount: Math.round(damage), color: '#f7deb0' });
     if (push && !enemy.boss) {
@@ -648,8 +675,9 @@
     const t = ENEMY[enemy.type];
     gainXp(state,t.xp);
     state.quests.kills++;
+    if(worldlife)worldlife.onKill(state,enemy);
     state.drops.push({ x: enemy.x, y: enemy.y, type: 'stones', amount: t.stones });
-    if(enemy.activityEnemy){enemy.respawn=1e9;effect(state,'burst',enemy.x,enemy.y,.5,40,{color:'#c8d7a3'});questCheck(state);return;}
+    if(enemy.activityEnemy||enemy.routeEnemy){enemy.respawn=1e9;effect(state,'burst',enemy.x,enemy.y,.5,40,{color:'#c8d7a3'});questCheck(state);return;}
     if (enemy.boss) {
       const first=!state.progress.bosses.includes(enemy.type);
       if(first)state.progress.bosses.push(enemy.type);
@@ -676,14 +704,14 @@
     const p = state.player, s = stats(state),weapon=weaponInfo(state);
     if (p.attackCd > 0 || state.dead || p.dashTime > 0) return;
     p.attackCd = weapon.cooldown;
-    if(weapon.kind!=='sword'){const info={element:weapon.kind==='bow'?'wind':CONTENT.ITEMS[weapon.itemId].element||'thunder',color:weapon.color};playerBolt(state,p.facing,weapon.projectileSpeed,s.attack*weapon.damageMultiplier,info,{life:weapon.range/weapon.projectileSpeed,radius:weapon.kind==='bow'?5:10,kind:weapon.kind==='bow'?'arrow':'orb',weaponKind:weapon.kind,angle:p.facing,...(weapon.kind==='staff'?{explosion:65}:weapon.pierce?{pierce:weapon.pierce,hits:[]}:{})});effect(state,weapon.kind==='bow'?'bowShot':'orbCast',p.x,p.y,.22,20,{angle:p.facing,color:weapon.color});return;}
+    if(weapon.kind!=='sword'){const info={element:weapon.kind==='bow'?'wind':CONTENT.ITEMS[weapon.itemId].element||'thunder',color:weapon.color},prepared=journey?journey.attack(state,weapon.kind):{};playerBolt(state,p.facing,weapon.projectileSpeed,s.attack*weapon.damageMultiplier,info,{life:weapon.range/weapon.projectileSpeed,radius:weapon.kind==='bow'?5:10,kind:weapon.kind==='bow'?'arrow':'orb',weaponKind:weapon.kind,angle:p.facing,...(weapon.kind==='staff'?{explosion:65}:weapon.pierce?{pierce:weapon.pierce,hits:[]}:{}),...prepared});effect(state,weapon.kind==='bow'?'bowShot':'orbCast',p.x,p.y,.22,20,{angle:p.facing,color:weapon.color});return;}
     effect(state, 'slash', p.x, p.y, 0.22, weapon.range+4, { angle: p.facing, color: '#e9e2b5' });
     let inflicted=0;
     for (const e of state.enemies) {
       if (e.hp <= 0 || e.gated || distance(e, p) > weapon.range + e.radius) continue;
       let diff = Math.atan2(e.y - p.y, e.x - p.x) - p.facing;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      if (Math.abs(diff) < 1.15 || distance(e, p) < e.radius + 26){const before=e.hp;hurtEnemy(state,e,s.attack*weapon.damageMultiplier,9);inflicted+=Math.max(0,before-e.hp);}
+      if (Math.abs(diff) < 1.15 || distance(e, p) < e.radius + 26){const before=e.hp;hurtEnemy(state,e,s.attack*weapon.damageMultiplier,9,{kind:'normal',weaponKind:'sword',element:'metal'});inflicted+=Math.max(0,before-e.hp);}
     }
     if(weapon.leech&&inflicted>0){const heal=Math.min(s.maxHp*weapon.leechCap,inflicted*weapon.leech);p.hp=Math.min(s.maxHp,p.hp+heal);effect(state,'heal',p.x,p.y,.35,30,{color:'#d0dfb4'});}
   }
@@ -695,7 +723,7 @@
     if(type==='root')e.rooted=Math.max(e.rooted||0,e.boss?life*.35:life);
   }
   function playerBolt(state,angle,speed,damage,info,options={}){
-    const p=state.player;state.projectiles.push({x:p.x+Math.cos(angle)*28,y:p.y+Math.sin(angle)*28,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:options.life||1.4,radius:options.radius||7,owner:'player',sourceId:'player',damage,element:info.element,color:info.color,...options});
+    const p=state.player;state.projectiles.push({x:p.x+Math.cos(angle)*28,y:p.y+Math.sin(angle)*28,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:options.life||1.4,radius:options.radius||7,owner:'player',sourceId:'player',damage,element:info.element,color:info.color,...(info.id?{attackKind:'technique',techniqueId:info.id}:{}),...options});
   }
   function cast(state,secondary=false) {
     const p=state.player,info=techniqueInfo(state,secondary?state.secondaryTechnique:state.activeTechnique),cd=secondary?'secondaryCd':'skillCd';
@@ -703,39 +731,40 @@
     const attack=stats(state).attack*info.multiplier*info.comboMultiplier,baseId=info.baseId||info.id,profile=info.castProfile||{},range=info.rangeMultiplier||1;
     if(p.mp<info.manaCost){outcome(state,'skill',false,'灵力不足。服用回春丹或返回驿站调息。');return;}
     p.mp-=info.manaCost;p[cd]=info.cooldown;
+    if(journey)journey.cast(state,info);
     if(info.comboReady){p.mp=Math.min(stats(state).maxMp,p.mp+info.comboRefund);effect(state,'particle',p.x,p.y-28,.8,18,{color:info.color});log(state,`五行相生：后一法威力提高25%，返还${info.comboRefund}灵力。`);}
     state.combo={element:info.comboElement,until:info.comboElement?state.time+info.comboWindow:0};
-    const extra={element:info.element,color:info.color};
+    const extra={element:info.element,color:info.color},ctx={kind:'technique',techniqueId:info.id,baseId,element:info.element,weaponKind:weaponInfo(state).kind};
     if(baseId==='arrow'){
       const count=profile.projectileCount||5,spread=profile.spread||.14;for(let i=0;i<count;i++){const offset=(i-(count-1)/2)*spread;playerBolt(state,p.facing+offset,670,attack*1.65,info,{life:1.25*range,radius:6,kind:'arrow',weaponKind:'bow',angle:p.facing+offset,...(i===Math.floor(count/2)?{pierce:3,hits:[]}:{})});}effect(state,'bowVolley',p.x,p.y,.4,22,{...extra,angle:p.facing});
     }else if(baseId==='sword'){
       effect(state,'burst',p.x,p.y,.65,210*range,extra);effect(state,'ring',p.x,p.y,.5,210*range,extra);
       const count=profile.projectileCount||3;for(let i=0;i<count;i++)playerBolt(state,p.facing+(i-(count-1)/2)*.14,520,attack*1.8,info,{life:(1.2+info.level*.12)*range,kind:'spectralBlade',weaponKind:'sword',angle:p.facing+(i-(count-1)/2)*.14});
-      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<210*range+e.radius){hurtEnemy(state,e,attack*1.5,28);if(!e.boss)e.stun=.85;}
+      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<210*range+e.radius){hurtEnemy(state,e,attack*1.5,28,ctx);if(!e.boss)e.stun=.85;}
     }else if(baseId==='flame'){
       effect(state,'flame',p.x,p.y,.8,175*range,extra);
       playerBolt(state,p.facing,380,attack*2.3,info,{radius:14,life:1.4*range,kind:'fireball',explosion:(profile.explosionRadius||145)*range,status:'burn',statusLife:4,statusDamage:attack*.3,weaponKind:'staff',angle:p.facing});
-      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<175*range+e.radius){hurtEnemy(state,e,attack*1.1,8);statusEnemy(e,'burn',4,attack*.3);}
+      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<175*range+e.radius){hurtEnemy(state,e,attack*1.1,8,ctx);statusEnemy(e,'burn',4,attack*.3);}
     }else if(baseId==='frost'){
       effect(state,'frost',p.x,p.y,.8,225*range,extra);
       const count=profile.projectileCount||5;for(let i=0;i<count;i++)playerBolt(state,p.facing+(i-(count-1)/2)*(profile.spread||.19),445,attack*1.05,info,{radius:9,life:1.4*range,status:'slow',statusLife:4,pierce:2,hits:[]});
-      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<225*range+e.radius){hurtEnemy(state,e,attack*.65,0);statusEnemy(e,'slow',4);}
+      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<225*range+e.radius){hurtEnemy(state,e,attack*.65,0,ctx);statusEnemy(e,'slow',4);}
     }else if(baseId==='wood'){
       p.hp=Math.min(stats(state).maxHp,p.hp+stats(state).maxHp*(.16+.025*info.level)*(1+info.affinity));
       effect(state,'heal',p.x,p.y,.8,75,extra);effect(state,'root',p.x,p.y,1,260*range,extra);
-      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<260*range+e.radius){hurtEnemy(state,e,attack*1.7,0);statusEnemy(e,'root',(profile.rootDuration||2.5)+info.level*.3);}
+      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<260*range+e.radius){hurtEnemy(state,e,attack*1.7,0,ctx);statusEnemy(e,'root',(profile.rootDuration||2.5)+info.level*.3);}
     }else if(baseId==='thunder'){
       let previous=p;const used=new Set();
       for(let i=0;i<(profile.chainTargets||2+info.level);i++){
         const targets=state.enemies.filter(e=>e.hp>0&&!e.gated&&!used.has(e.id)&&distance(e,previous)<(i?300:680)*range);
         targets.sort((a,b)=>i?distance(a,previous)-distance(b,previous):Math.hypot(a.x-(p.x+Math.cos(p.facing)*350),a.y-(p.y+Math.sin(p.facing)*350))-Math.hypot(b.x-(p.x+Math.cos(p.facing)*350),b.y-(p.y+Math.sin(p.facing)*350)));
-        const e=targets[0];if(!e)break;effect(state,'thunder',e.x,e.y,.45,25,{...extra,fromX:previous.x,fromY:previous.y});hurtEnemy(state,e,attack*3.2*Math.pow(.86,i),0);e.stun=Math.max(e.stun,e.boss?.2:.6);used.add(e.id);previous=e;
+        const e=targets[0];if(!e)break;effect(state,'thunder',e.x,e.y,.45,25,{...extra,fromX:previous.x,fromY:previous.y});hurtEnemy(state,e,attack*3.2*Math.pow(.86,i),0,ctx);e.stun=Math.max(e.stun,e.boss?.2:.6);used.add(e.id);previous=e;
       }
       effect(state,'ring',p.x,p.y,.4,70,extra);
     }else if(baseId==='earth'){
       p.shield=Math.max(p.shield,stats(state).maxHp*(.22+info.level*.055));p.shieldTime=6;
       effect(state,'shield',p.x,p.y,1,52,extra);effect(state,'impact',p.x,p.y,.7,230*range,extra);
-      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<230*range+e.radius){hurtEnemy(state,e,attack*2.5,profile.knockback||45);e.stun=Math.max(e.stun,e.boss?.15:.9);}
+      for(const e of state.enemies)if(e.hp>0&&!e.gated&&distance(e,p)<230*range+e.radius){hurtEnemy(state,e,attack*2.5,profile.knockback||45,ctx);e.stun=Math.max(e.stun,e.boss?.15:.9);}
     }
   }
 
@@ -745,10 +774,11 @@
   }
 
   function beginAttack(state, e) {
-    const a=state.activity,crystal=a&&a.type==='defense'&&a.crystal&&a.crystal.hp>0&&distance(e,state.player)>220?a.crystal:null,p=crystal||state.player;e.attackTarget=crystal?'crystal':'player';
+    const a=state.activity,routeObjective=journey&&journey.objective(state),crystal=a&&a.type==='defense'&&a.crystal&&a.crystal.hp>0&&distance(e,state.player)>220?a.crystal:routeObjective&&routeObjective.hp>0&&distance(e,state.player)>180?routeObjective:null,p=crystal||state.player;e.attackTarget=crystal?(routeObjective===crystal?'routeObjective':'crystal'):'player';
     const skin=ENEMY[e.type].skin||e.type;
     e.mode = 'windup'; e.attackX = p.x; e.attackY = p.y;
     e.facing = Math.atan2(p.y - e.y, p.x - e.x);
+    const behavior=ENEMY[e.type].behavior;if(behavior){e.phase++;e.attackTimer=behavior==='furnace'?1.2:['dive','arc','brace','wave'].includes(behavior)?1.05:behavior==='swarm'?.38:.72;restoreAttackWarning(state,e);e.telegraph=e.attackTimer;return;}
     if (e.boss) {
       e.phase++;
       e.attackTimer = e.type === 'wolfKing' ? 0.85 : 1.05;
@@ -766,14 +796,17 @@
 
   function restoreAttackWarning(state,e){
     const skin=ENEMY[e.type].skin||e.type,life=Math.max(.01,e.attackTimer);
+    const b=ENEMY[e.type].behavior;if(b){const ranged=['ink','song','poison','drain','prism','lantern','fox','salamander','furnace','sixarm'].includes(b),radius=b==='furnace'?125:b==='arc'?110:b==='dive'?115:b==='brace'?85:b==='guard'?80:ranged?42:55;effect(state,'warning',ranged?e.x:e.attackX,ranged?e.y:e.attackY,life,radius,{color:b==='arc'?'#cab2f2':'#e4a682',sourceId:e.id,behavior:b});if(['dive','wave','steal','brace','stag'].includes(b))effect(state,'warning',e.x,e.y,life,45,{angle:e.facing,targetX:e.attackX,targetY:e.attackY,sourceId:e.id,behavior:b});return;}
     if(e.boss){const radius=e.type==='wolfKing'?110:e.type==='ancientTree'?130:148;effect(state,'warning',e.attackX,e.attackY,life,radius,{color:'#dc795e',sourceId:e.id});if(e.type==='wolfKing')effect(state,'warning',e.x,e.y,life,85,{angle:e.facing,targetX:e.attackX,targetY:e.attackY,sourceId:e.id});}
     else effect(state,'warning',skin==='spirit'?e.x:e.attackX,skin==='spirit'?e.y:e.attackY,life,skin==='spirit'?32:skin==='golem'?65:45,{color:'#dca478',sourceId:e.id});
   }
 
   function finishAttack(state, e) {
-    const p = state.player, t = e.activityEnemy?activityEnemySpec(e.type,e.activityRealm,e.activityStage):ENEMY[e.type];
+    const p = state.player, t = runtimeEnemySpec(e);
     const skin=t.skin||e.type;
+    if(t.behavior){finishFrontierAttack(state,e,t);return;}
     if(e.attackTarget==='crystal'&&state.activity&&state.activity.crystal){const c=state.activity.crystal;if(skin==='spirit')shoot(state,e,Math.atan2(e.attackY-e.y,e.attackX-e.x),230,t.damage,9);else if(Math.hypot(c.x-e.attackX,c.y-e.attackY)<100&&distance(c,e)<t.range+80){c.hp=Math.max(0,c.hp-t.damage);effect(state,'impact',c.x,c.y,.3,45,{color:'#eca077'});}e.cooldown=1.4;e.attackTimer=0;e.telegraph=0;e.mode='chase';return;}
+    if(e.attackTarget==='routeObjective'&&journey.objective(state)){const c=journey.objective(state);if(skin==='spirit')shoot(state,e,Math.atan2(e.attackY-e.y,e.attackX-e.x),230,t.damage,9);else if(Math.hypot(c.x-e.attackX,c.y-e.attackY)<100&&distance(c,e)<t.range+80){journey.objectiveDamage(state,t.damage);effect(state,'impact',c.x,c.y,.3,45,{color:'#eca077'});}e.cooldown=1.4;e.attackTimer=0;e.telegraph=0;e.mode='chase';return;}
     if (e.boss) {
       const radius = e.type === 'wolfKing' ? 110 : e.type === 'ancientTree' ? 130 : 148;
       if (e.type === 'wolfKing'||e.type==='frostWyrm') {
@@ -815,17 +848,40 @@
     e.attackTimer = 0; e.telegraph = 0; e.mode = 'chase';
   }
 
+  function finishFrontierAttack(state,e,t){
+    const p=state.player,b=t.behavior,target=e.attackTarget==='routeObjective'?journey.objective(state):e.attackTarget==='crystal'?state.activity?.crystal:null,aim=Math.atan2(e.attackY-e.y,e.attackX-e.x),hit=(radius,damage=t.damage,x=e.attackX,y=e.attackY)=>{const q=target||p;if(Math.hypot(q.x-x,q.y-y)>=radius+18)return false;if(target){if(e.attackTarget==='routeObjective')journey.objectiveDamage(state,damage);else target.hp=Math.max(0,target.hp-damage);return true;}return hurtPlayer(state,damage,e.x,e.y);},dash=n=>{const d=Math.hypot(e.attackX-e.x,e.attackY-e.y);if(d>1)move(state,e,Math.cos(aim)*Math.min(n,d),Math.sin(aim)*Math.min(n,d),e.radius,true);};
+    if(b==='swarm'){if(distance(p,e)<125){dash(90);hit(55);}e.cooldown=e.phase%3===0?1.8:.48;}
+    else if(b==='steal'){dash(270);const before=p.hp;if(distance(p,e)<90&&hit(70)&&p.hp<before)worldlife.steal(state,e);e.cooldown=2.7;}
+    else if(b==='ink'){for(let i=-1;i<=1;i++)shoot(state,e,aim+i*.24,260,t.damage,8);e.cooldown=2.1;}
+    else if(b==='guard'){for(const side of [-1,1]){const x=e.x+Math.cos(e.facing+side*.5)*70,y=e.y+Math.sin(e.facing+side*.5)*70;effect(state,'impact',x,y,.35,55,{color:'#d4b584'});if(Math.hypot(p.x-x,p.y-y)<65)hurtPlayer(state,t.damage,x,y);}e.cooldown=1.5;}
+    else if(b==='song'){for(let i=0;i<10;i++)shoot(state,e,i*Math.PI/5+e.phase*.13,185,t.damage*.65,8);if(distance(p,e)<150&&hurtPlayer(state,t.damage,e.x,e.y))p.slow=3;effect(state,'ring',e.x,e.y,.8,150,{color:'#95dbe1'});e.cooldown=3;}
+    else if(b==='wave'){dash(350);if(distance(p,e)<100)hit(85);for(let i=-1;i<=1;i++)shoot(state,e,aim+i*.18,315,t.damage*.65,10);effect(state,'frost',e.x,e.y,.6,85,{color:'#8ecad9'});e.cooldown=2.3;}
+    else if(b==='poison'){for(let i=-1;i<=1;i++)shoot(state,e,aim+i*.16,330,t.damage*.7,6);e.cooldown=2.1;}
+    else if(b==='brace'){dash(240);if(distance(p,e)<120)hit(95);effect(state,'impact',e.x,e.y,.5,95,{color:'#c6b184'});e.cooldown=2.5;}
+    else if(b==='drain'){shoot(state,e,aim,285,t.damage,13);e.cooldown=1.9;}
+    else if(b==='dive'){dash(500);hit(115);effect(state,'impact',e.attackX,e.attackY,.7,115,{color:'#d1dae0'});e.cooldown=3;}
+    else if(b==='prism'){for(let i=0;i<8;i++)shoot(state,e,i*Math.PI/4+e.phase*.27,275,t.damage*.8,7);e.cooldown=2.25;}
+    else if(b==='arc'){hit(110);effect(state,'lightning',e.attackX,e.attackY,.55,110,{color:'#ddcafa',element:'thunder'});e.cooldown=2.3;}
+    else if(b==='salamander'){for(const side of [-1,1])shoot(state,e,aim+side*.12,260,t.damage*.8,8);e.cooldown=1.45;}
+    else if(b==='lantern'){for(let i=0;i<6;i++)shoot(state,e,i*Math.PI/3+e.phase*.2,220,t.damage*.75,9);effect(state,'flame',e.x,e.y,.6,75,{color:'#eda079'});e.cooldown=2.2;}
+    else if(b==='furnace'){hit(125,t.damage,e.x,e.y);effect(state,'flame',e.x,e.y,.8,125,{color:'#eda079'});e.cooldown=2.1;}
+    else if(b==='stag'){dash(120);if(hit(70)&&!target)p.slow=2;effect(state,'frost',e.x,e.y,.45,60,{color:'#b6dce9'});e.cooldown=1.6;}
+    else if(b==='fox'){for(const side of [-1,1])shoot(state,e,aim+side*.15,290,t.damage*.8,7);e.cooldown=1.8;}
+    else if(b==='sixarm'){for(let i=0;i<6;i++){shoot(state,e,e.facing+i*Math.PI/3,230,t.damage*.8,12);state.projectiles[state.projectiles.length-1].life=.65;}hit(75,t.damage*.65);effect(state,'frost',e.x,e.y,.55,95,{color:'#b6dce9'});e.cooldown=1.9;}
+    e.attackTimer=0;e.telegraph=0;e.mode='chase';
+  }
+
   function enemyStep(state, e, dt) {
-    const p = state.player, t = e.activityEnemy?activityEnemySpec(e.type,e.activityRealm,e.activityStage):ENEMY[e.type];
-    const skin=t.skin||e.type,trial=state.activity?null:state.trials[state.mapId];
+    const p = state.player, t = runtimeEnemySpec(e);
+    const skin=t.skin||e.type,trial=state.activity||state.journey&&state.journey.active?null:state.trials[state.mapId];
     e.hit = Math.max(0, e.hit - dt); e.stun = Math.max(0, e.stun - dt);
     e.dormant=!!trial&&(trial.cleared||e.wave!==trial.wave);
     e.gated = (e.boss && p.realm < t.realm)||e.dormant;
     e.slow=Math.max(0,(e.slow||0)-dt);e.rooted=Math.max(0,(e.rooted||0)-dt);
-    if(e.hp>0&&e.burn>0&&!e.gated){e.burn=Math.max(0,e.burn-dt);e.burnTick=(e.burnTick||0)+dt;if(e.burnTick>=.5){e.burnTick-=.5;hurtEnemy(state,e,e.burnDamage*.5,0);effect(state,'flame',e.x,e.y,.3,30,{element:'fire',color:'#efa179'});}}
+    if(e.hp>0&&e.burn>0&&!e.gated){e.burn=Math.max(0,e.burn-dt);e.burnTick=(e.burnTick||0)+dt;if(e.burnTick>=.5){e.burnTick-=.5;hurtEnemy(state,e,e.burnDamage*.5,0,{kind:'dot',element:'fire'});effect(state,'flame',e.x,e.y,.3,30,{element:'fire',color:'#efa179'});}}
     e.vx = 0; e.vy = 0;
     if (e.hp <= 0) {
-      if (!e.boss&&!trial&&!e.activityEnemy) {
+      if (!e.boss&&!trial&&!e.activityEnemy&&!e.routeEnemy) {
         e.respawn -= dt;
         if (e.respawn <= 0 && distance(e, p) > 520 && distance({ x: e.homeX, y: e.homeY }, p) > 440) {
           Object.assign(e, enemyAt(e.type, e.homeX, e.homeY, Number(e.id.split('-')[1])));
@@ -836,6 +892,7 @@
     }
     if (e.gated || e.stun > 0) return;
     if(state.activity&&state.activity.phase!=='fight')return;
+    if(state.journey&&state.journey.active&&state.journey.active.phase!=='fight')return;
     e.cooldown = Math.max(0, e.cooldown - dt);
     if (e.mode === 'windup') {
       if (state.dead || isSafe(state)) { e.mode = 'patrol'; e.attackTimer = 0; e.telegraph = 0; return; }
@@ -844,17 +901,18 @@
       if (e.attackTimer <= 0) finishAttack(state, e);
       return;
     }
-    const target=state.activity&&state.activity.type==='defense'&&distance(e,p)>220?state.activity.crystal:p;
+    const routeObjective=journey&&journey.objective(state),target=state.activity&&state.activity.type==='defense'&&distance(e,p)>220?state.activity.crystal:routeObjective&&distance(e,p)>180?routeObjective:p;
     const d = distance(e, target), homeDistance = Math.hypot(e.x - e.homeX, e.y - e.homeY);
-    const leash = e.activityEnemy?5000:e.boss ? 660 : 460;
+    const leash = e.activityEnemy||e.routeEnemy?5000:e.boss ? 660 : 460;
     const engaged = !state.dead && !isSafe(state) && d < t.aggro && homeDistance < leash;
     let tx, ty, speed;
     if (engaged) {
       e.mode = 'chase'; e.facing = Math.atan2(target.y - e.y, target.x - e.x);
       if (d < t.range && e.cooldown <= 0) { beginAttack(state, e); return; }
-      const desired = skin === 'spirit' ? 240 : e.type === 'ancientTree' ? 260 : e.type === 'guardian' ? 170 : 45;
-      if (d > desired) { tx = target.x; ty = target.y; speed = t.speed; }
-      else if (skin === 'spirit' && d < 150) { tx = e.x + (e.x - target.x); ty = e.y + (e.y - target.y); speed = t.speed * 0.75; }
+      const ranged=['ink','song','poison','drain','prism','arc','lantern','fox'].includes(t.behavior),desired=t.behavior==='drain'?210:ranged?Math.min(270,t.range-35):skin === 'spirit' ? 240 : e.type === 'ancientTree' ? 260 : e.type === 'guardian' ? 170 : 45;
+      if(t.behavior==='drain'&&e.cooldown>0){e.patrol+=dt*1.8;tx=target.x+Math.cos(e.patrol)*220;ty=target.y+Math.sin(e.patrol)*220;speed=t.speed;}
+      else if (d > desired) { tx = target.x; ty = target.y; speed = t.speed; }
+      else if ((skin === 'spirit'||ranged) && d < 170) { tx = e.x + (e.x - target.x); ty = e.y + (e.y - target.y); speed = t.speed * 0.75; }
       else return;
     } else if (homeDistance > 135) {
       e.mode = 'return'; tx = e.homeX; ty = e.homeY; speed = t.speed * 0.85;
@@ -877,15 +935,16 @@
     if (state.dead) return outcome(state, 'interact', false, '灵身已散，先在归元祠重聚灵身。');
     const p = state.player;
     const m=mapInfo(state);
+    if(state.journey&&state.journey.active){state.interaction='journey';return outcome(state,'interact',true,'');}
     if(state.activity){state.interaction='sect';return outcome(state,'interact',true,'');}
     const candidates=[...m.portals.filter(n=>distance(n,p)<105).map(n=>({kind:'portal',entry:n})),...m.npcs.filter(n=>distance(n,p)<105).map(n=>({kind:'npc',entry:n})),...Object.values(CONTENT.EXPLORATION_SITES).filter(s=>s.mapId===state.mapId&&!state.exploration.claimed.includes(s.id)&&distance(s,p)<105).map(s=>({kind:'site',entry:s})),...state.nodes.filter(n=>n.ready<=0&&distance(n,p)<90).map(n=>({kind:'node',entry:n}))];
     candidates.sort((a,b)=>distance(a.entry,p)-distance(b.entry,p));const chosen=candidates[0];
     if(!chosen)return outcome(state,'interact',false,'靠近灵脉、资源、传送门或驿站人物，按 E 交互。');
     if(chosen.kind==='portal'){state.interaction='portal:'+chosen.entry.target;return outcome(state,'interact',true,'');}
-    if(chosen.kind==='npc'){state.interaction=chosen.entry.interaction||chosen.entry.id;return outcome(state,'interact',true,'');}
+    if(chosen.kind==='npc'){state.interaction=CONTENT.WORLD_NPCS[chosen.entry.id]?'worldlife:'+chosen.entry.id:chosen.entry.interaction||chosen.entry.id;return outcome(state,'interact',true,'');}
     if(chosen.kind==='site'){state.interaction='site:'+chosen.entry.id;return outcome(state,'interact',true,'');}
     const node=chosen.entry;
-    const yieldMultiplier=daoEffects(state).gatherYield;
+    const yieldMultiplier=daoEffects(state).gatherYield*(worldlife?worldlife.effects(state).gather:1);
     node.ready = node.type === 'herb' ? 75 : node.type==='crystal'?95:120;
     if (node.type === 'herb') {
       const amount=Math.ceil(2*yieldMultiplier);p.herbs += amount; gainXp(state,6); state.quests.herbs += amount;state.progress.gathered.herbs=(state.progress.gathered.herbs||0)+amount;
@@ -906,6 +965,9 @@
 
   function action(state, id) {
     if(typeof id!=='string')return outcome(state,'unknown',false,'未知操作。');
+    const work=workshop&&workshop.action(state,id);if(work)return work;
+    const nextJourney=journey&&journey.action(state,id);if(nextJourney)return nextJourney;
+    const social=worldlife&&worldlife.action(state,id);if(social)return social;
     const systemAction=systemsAction(state,id);if(systemAction)return systemAction;
     const character=npcAction(state,id);if(character)return character;
     const extended=expandedAction(state,id);if(extended)return extended;
@@ -914,9 +976,10 @@
       if (!state.dead) return outcome(state, id, false, '灵身尚在，无须重聚。');
       const loss = Math.floor(p.stones * 0.12);
       p.stones -= loss; p.xp = Math.max(0, p.xp - Math.min(45, Math.floor(p.xp * 0.08)));
-      const activityDeath=!!state.activity;if(activityDeath)leaveActivity(state);else{state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};state.mapId='main';const home=state.worlds.main;state.enemies=home.enemies;state.nodes=home.nodes;state.drops=home.drops;}
-      p.x = activityDeath?1600:550; p.y = activityDeath?1800:1780; p.hp = s.maxHp; p.mp = s.maxMp; p.invuln = 2;p.shield=0;p.shieldTime=0;p.slow=0;state.buffs=[];
+      const activityDeath=!!state.activity,routeDeath=!!(state.journey&&state.journey.active);if(activityDeath)leaveActivity(state);else if(routeDeath)journey.leave(state);else{state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};state.mapId='main';const home=state.worlds.main;state.enemies=home.enemies;state.nodes=home.nodes;state.drops=home.drops;}
+      p.x = activityDeath?1600:routeDeath?p.x:550; p.y = activityDeath?1800:routeDeath?p.y:1780; p.hp = s.maxHp; p.mp = s.maxMp; p.invuln = 2;p.shield=0;p.shieldTime=0;p.slow=0;state.buffs=[];
       p.dashTime = 0; p.attackCd = 0; state.dead = false; state.interaction = null;
+      if(worldlife)worldlife.revive(state);
       state.projectiles = []; state.effects = [];
       return outcome(state, id, true, `归元祠重聚灵身，损失 ${loss} 灵石与少量修为。境界、装备和任务保留。`);
     }
@@ -954,7 +1017,7 @@
       return outcome(state, id, true, `灵剑淬炼至 ${p.weapon} 重，攻击力提升 4。`);
     }
     const cultivation=cultivationInfo(state);if(!cultivation.ready)return outcome(state,id,false,cultivation.reason);
-    pay(state,cultivation.cost);p.xp -= s.xpNeeded; p.realm++;
+    pay(state,cultivation.cost);if(journey)journey.consumeFoundation(state);p.xp -= cultivation.xpNeeded; p.realm++;
     const next = stats(state); p.hp = next.maxHp; p.mp = next.maxMp;
     effect(state, 'burst', p.x, p.y, 1.2, 180, { color: '#f1d89d' });
     state.enemies.forEach(e => { e.gated = e.boss && p.realm < ENEMY[e.type].realm; });
@@ -971,12 +1034,14 @@
     ['attackCd', 'skillCd', 'secondaryCd', 'dashCd', 'invuln', 'hit'].forEach(key => { p[key] = Math.max(0, p[key] - dt); });
     productionStep(state,dt);
     alchemyStep(state,dt);
+    if(workshop)workshop.step(state,dt);
     state.nodes.forEach(n => { n.ready = Math.max(0, n.ready - dt); });
     if (!state.dead) {
       if (finite(input.aimX) && finite(input.aimY) && Math.hypot(input.aimX - p.x, input.aimY - p.y) > 4) p.facing = Math.atan2(input.aimY - p.y, input.aimX - p.x);
       let mx = finite(input.mx) ? clamp(input.mx, -1, 1) : 0, my = finite(input.my) ? clamp(input.my, -1, 1) : 0;
       const length = Math.hypot(mx, my); if (length > 1) { mx /= length; my /= length; }
       if (input.dash && p.dashCd <= 0) {
+        if(journey)journey.dash(state);
         p.dashTime = 0.19; p.dashCd = 1.4; p.invuln = Math.max(p.invuln, 0.25);
         const d = Math.hypot(mx, my); p.dashX = d > 0 ? mx / d : Math.cos(p.facing); p.dashY = d > 0 ? my / d : Math.sin(p.facing);
       }
@@ -1000,18 +1065,19 @@
       if (b.life > 0 && b.owner === 'player') {
         for (const e of state.enemies) {
           if (e.hp > 0 && !e.gated && !(b.hits||[]).includes(e.id)&&Math.hypot(e.x - b.x, e.y - b.y) < b.radius + e.radius) {
-            hurtEnemy(state, e, b.damage, 7);if(b.status)statusEnemy(e,b.status,b.statusLife,b.statusDamage);
+            const ctx={kind:b.attackKind||'normal',element:b.element,weaponKind:b.weaponKind||weaponInfo(state).kind,techniqueId:b.techniqueId,baseId:b.techniqueId?(CONTENT.TECHNIQUES[b.techniqueId].baseId||b.techniqueId):null,windPrepared:b.windPrepared};hurtEnemy(state, e, b.damage, 7,ctx);if(b.status)statusEnemy(e,b.status,b.statusLife,b.statusDamage);
             if(b.pierce){b.hits=b.hits||[];b.hits.push(e.id);b.pierce--;if(b.pierce<=0)b.life=0;}else b.life=0;
-            if(b.explosion){effect(state,b.status==='burn'?'flame':'impact',b.x,b.y,.6,b.explosion,{element:b.element,color:b.color});for(const other of state.enemies)if(other!==e&&other.hp>0&&!other.gated&&Math.hypot(other.x-b.x,other.y-b.y)<b.explosion+other.radius){hurtEnemy(state,other,b.damage*.6,8);if(b.status==='burn')statusEnemy(other,'burn',b.statusLife,b.statusDamage);}}
+            if(b.explosion){effect(state,b.status==='burn'?'flame':'impact',b.x,b.y,.6,b.explosion,{element:b.element,color:b.color});for(const other of state.enemies)if(other!==e&&other.hp>0&&!other.gated&&Math.hypot(other.x-b.x,other.y-b.y)<b.explosion+other.radius){hurtEnemy(state,other,b.damage*.6,8,ctx);if(b.status==='burn')statusEnemy(other,'burn',b.statusLife,b.statusDamage);}}
             effect(state, 'impact', b.x, b.y, 0.23, 22, { color: b.color||'#a5e4e3',element:b.element||'metal' });
             break;
           }
         }
       }
       if (b.life > 0 && b.owner === 'enemy' && !state.dead && Math.hypot(p.x - b.x, p.y - b.y) < b.radius + 18) {
-        const hit=hurtPlayer(state, b.damage, b.x - b.vx, b.y - b.vy);if(hit&&['ice','wood'].includes(b.element))p.slow=2.5;b.life = 0;
+        const source=state.enemies.find(e=>e.id===b.sourceId),before=p.hp,hit=hurtPlayer(state, b.damage, b.x - b.vx, b.y - b.vy);if(hit&&['ice','wood'].includes(b.element))p.slow=2.5;if(hit&&p.hp<before&&source){const behavior=ENEMY[source.type].behavior;if(behavior==='drain'){p.mp=Math.max(0,p.mp-18);if(source.hp>0)source.hp=Math.min(source.maxHp,source.hp+b.damage*.6);}if(behavior==='poison')worldlife.poison(state,b.damage*.18);}b.life = 0;
       }
       if(b.life>0&&b.owner==='enemy'&&state.activity&&state.activity.type==='defense'&&distance(b,state.activity.crystal)<b.radius+36){state.activity.crystal.hp=Math.max(0,state.activity.crystal.hp-b.damage);b.life=0;effect(state,'impact',b.x,b.y,.3,25,{color:b.color});}
+      const routeObjective=journey&&journey.objective(state);if(b.life>0&&b.owner==='enemy'&&routeObjective&&distance(b,routeObjective)<b.radius+36){journey.objectiveDamage(state,b.damage);b.life=0;effect(state,'impact',b.x,b.y,.3,25,{color:b.color});}
     }
     state.projectiles = state.projectiles.filter(b => b.life > 0).slice(-200);
     const kept = [];
@@ -1027,16 +1093,18 @@
     state.drops = kept.slice(-100);
     state.effects.forEach(e => { e.life -= dt; });
     state.effects = state.effects.filter(e => e.life > 0);
-    if(state.activity)activityStep(state,dt);else trialCheck(state);
+    if(journey)journey.step(state,dt);if(worldlife)worldlife.step(state,dt);if(state.activity)activityStep(state,dt);else if(!(state.journey&&state.journey.active))trialCheck(state);
     return state;
   }
 
   function objective(state) {
     const p = state.player, s = stats(state);
     if (state.dead) return '灵身已散 · 点击重聚灵身，返回安全据点';
+    if(state.journey&&state.journey.active){const a=journey.expeditionInfo(state);return a.completed?`${a.name}已完成 · ${Math.ceil(a.returnRemaining)}秒后返程`:a.failed?`${a.name}失败 · 返回整备`:`${a.name} · ${a.stage}/3 ${a.stageName} · ${a.phase==='fight'?'剩余'+a.remainingEnemies+'敌人':a.phase==='choice'?'按E选择行路策略':'前往站点旗帜'}`;}
     if(state.activity){const a=activityInfo(state);return a.completed?`${a.name}已完成 · 奖励已领取 · ${Math.ceil(a.returnRemaining)} 秒后自动返回青云宗`:a.failed?`${a.name}失败 · 退出后可重新挑战`:a.phase==='choice'?'镇妖塔 · 选择一项祝福再登下一层':a.type==='tribulation'?`${a.rank} 重雷劫 · 避开落雷，再坚持 ${Math.ceil(a.timeRemaining)} 秒`:a.type==='defense'?`护脉守护 · 第 ${a.wave}/3 波 · 晶石 ${Math.ceil(a.crystal.hp)}/${a.crystal.maxHp}`:`${a.name} · ${a.type==='tower'?`第 ${a.floor}/5 层 · `:''}剩余 ${a.remainingEnemies} 敌`;}
     if(state.mapId==='sect')return !state.sect.joined?'青云宗 · 在宗门面板加入山门，试用灵弓与法杖':p.realm<1?'青云宗 · 备齐兵器丹药，出山击败苍牙，筑基后开启宗门经营':`${s.realmName}修行 · 经营设施、领取成果；${cultivationInfo(state).ready?'可在破境坛突破':cultivationInfo(state).reason}`;
     const m=mapInfo(state);if(m.type==='trial')return m.trial.cleared?'秘境已通关 · 返回入口退出，重新进入可挑战':`${m.name} · 第 ${m.trial.wave}/3 重试炼 · ${state.enemies.filter(e=>e.wave===m.trial.wave&&e.hp>0).length} 个敌人`;
+    if(m.type==='frontier'){const active=worldlife.worldQuestInfo(state).filter(q=>q.accepted&&!q.claimed);return active.length?`${m.name} · ${active[0].name} ${active[0].progress}/${active[0].target} · 完成后回人物处交付`:`${m.name} · 在安全街区结识人物，接取支线，探索独有妖物`;}
     if(m.id!=='main'){const boss=m.id==='red'?'flameLord':'frostWyrm';return state.progress.bosses.includes(boss)?`${m.name} · 采集灵材、探索秘境与推进山海志`:`${m.name} · 寻找并击败${ENEMY[boss].name}`;}
     if (state.won) return p.realm>=7?'大乘圆满 · 游历山海，经营宗门或再战镇妖塔':`${s.realmName}道途 · ${p.realm<3?'回安全据点突破元婴':p.realm===3?'前往青云宗，登顶镇妖塔后突破化神':'前往青云宗渡劫，继续突破更高境界'}`;
     if (!state.quests.bosses.includes('wolfKing')) {
@@ -1050,8 +1118,8 @@
   }
 
   function serialize(state) {
-    if(state.activity)state.activity.world={enemies:state.enemies,nodes:state.nodes,drops:state.drops};else state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};
-    const keys=['version','seed','rng','time','player','mapId','worlds','root','techniques','techniqueGrades','npcProgress','activeTechnique','secondaryTechnique','legacyTechniqueIds','combo','sect','activity','exploration','dao','alchemy','inventory','equipment','buffs','story','progress','trials','projectiles','logs','quests','questRewards','won','dead','meditationCd'];
+    if(state.activity)state.activity.world={enemies:state.enemies,nodes:state.nodes,drops:state.drops};else if(state.journey&&state.journey.active)state.journey.active.world={enemies:state.enemies,nodes:state.nodes,drops:state.drops};else state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};
+    const keys=['version','seed','rng','time','player','mapId','worlds','root','techniques','techniqueGrades','npcProgress','activeTechnique','secondaryTechnique','legacyTechniqueIds','combo','sect','activity','exploration','dao','alchemy','journey','workshop','management','worldlife','inventory','equipment','buffs','story','progress','trials','projectiles','logs','quests','questRewards','won','dead','meditationCd'];
     const data={};for(const key of keys)data[key]=state[key];return JSON.stringify(data);
   }
 
@@ -1136,13 +1204,13 @@
   function deserialize(json){
     const fail=()=>{throw new Error('存档无效或不兼容，请选择有效的山海问剑存档。');};
     if(typeof json!=='string'||json.length>1500000)fail();let d;try{d=JSON.parse(json);}catch(_){fail();}
-    if(!d||typeof d!=='object')fail();if(d.version===1)return expand(deserializeV1(json),true);if(![2,3,4,5].includes(d.version))fail();
+    if(!d||typeof d!=='object')fail();if(d.version<7&&d.worldlife!==undefined)fail();if(d.version===1)return expand(deserializeV1(json),true);if(![2,3,4,5,6,7].includes(d.version))fail();
     const num=(v,lo,hi,integer=false)=>{if(!finite(v)||v<lo||v>hi||integer&&!Number.isInteger(v))fail();return v;};
     const bool=v=>{if(typeof v!=='boolean')fail();return v;};
     const object=v=>{if(!v||typeof v!=='object'||Array.isArray(v))fail();return v;};
     const ids=(v,allowed,max=allowed.length)=>{if(!Array.isArray(v)||v.length>max||v.some(k=>!allowed.includes(k))||new Set(v).size!==v.length)fail();return v.slice();};
     const s=createGame(num(d.seed,1,4294967295,true));s.rng=num(d.rng,1,4294967295,true);s.time=num(d.time,0,1e9);
-    if(!CONTENT.MAPS[d.mapId])fail();s.mapId=d.mapId;
+    if(!CONTENT.MAPS[d.mapId]||d.version<7&&!LEGACY_MAP_IDS.includes(d.mapId))fail();s.mapId=d.mapId;
     const r=object(d.root);if(!CONTENT.ROOT_GRADES[r.grade])fail();s.root={grade:r.grade,elements:ids(r.elements,Object.keys(CONTENT.ELEMENTS),2),legacy:bool(r.legacy)};
     if(!s.root.elements.length||s.root.legacy&&(s.root.grade!=='mortal'||s.root.elements.length!==1||s.root.elements[0]!=='metal'))fail();
     s.techniques={};for(const [id,level]of Object.entries(object(d.techniques))){if(!CONTENT.TECHNIQUES[id])fail();s.techniques[id]=num(level,1,3,true);}if(!s.techniques.sword||!s.techniques[d.activeTechnique])fail();s.activeTechnique=d.activeTechnique;
@@ -1150,24 +1218,24 @@
     else{const grades=object(d.techniqueGrades);if(Object.keys(grades).length!==Object.keys(s.techniques).length)fail();for(const [id,index]of Object.entries(grades)){if(!s.techniques[id])fail();s.techniqueGrades[id]=num(index,0,4,true);if(d.version>=4&&index!==CONTENT.TECHNIQUES[id].gradeIndex)fail();}}
     if(d.version<4){for(const [id,index]of Object.entries({...s.techniqueGrades})){if(index){const grade=Object.values(CONTENT.TECHNIQUE_GRADES).find(g=>g.index===index),variant=id+'_'+grade.id;if(!CONTENT.TECHNIQUES[variant])fail();s.techniques[variant]=s.techniques[id];s.techniqueGrades[variant]=index;s.legacyTechniqueIds.push(variant);s.techniqueGrades[id]=0;if(s.activeTechnique===id)s.activeTechnique=variant;}}}
     else{s.legacyTechniqueIds=ids(d.legacyTechniqueIds,Object.keys(CONTENT.TECHNIQUES));for(const id of s.legacyTechniqueIds)if(!s.techniques[id]||!CONTENT.TECHNIQUES[id].gradeIndex)fail();s.secondaryTechnique=d.secondaryTechnique;if(s.secondaryTechnique!==null&&(!s.techniques[s.secondaryTechnique]||s.secondaryTechnique===s.activeTechnique))fail();const combo=object(d.combo);if(combo.element!==null&&!Object.keys(GENERATES).includes(combo.element))fail();s.combo={element:combo.element,until:num(combo.until,0,s.time+(d.version>=5?8:6))};if(!s.combo.element&&s.combo.until!==0)fail();}
-    s.inventory={};for(const [id,count]of Object.entries(object(d.inventory))){const item=CONTENT.ITEMS[id];if(!item||item.resourceField)fail();s.inventory[id]=num(count,0,1e7,true);}if(!s.inventory.starterSword||!s.inventory.clothRobe)fail();
+    s.inventory={};for(const [id,count]of Object.entries(object(d.inventory))){const item=CONTENT.ITEMS[id];if(!item||item.resourceField||d.version<6&&!LEGACY_ITEM_IDS.has(id))fail();s.inventory[id]=num(count,0,1e7,true);}if(!s.inventory.starterSword||!s.inventory.clothRobe)fail();
     const eq=object(d.equipment);s.equipment={};for(const slot of ['weapon','robe','charm']){const id=eq[slot];if(id===null){if(slot!=='charm')fail();s.equipment[slot]=null;}else{const item=CONTENT.ITEMS[id];if(!item||item.slot!==slot||!s.inventory[id])fail();s.equipment[slot]=id;}}
     if(!Array.isArray(d.buffs)||d.buffs.length>3)fail();s.buffs=d.buffs.map(b=>{if(!b||!['rage','ward','insight'].includes(b.type))fail();return{type:b.type,life:num(b.life,0,{rage:40,ward:45,insight:60}[b.type])};});if(new Set(s.buffs.map(b=>b.type)).size!==s.buffs.length)fail();
     const p=object(d.player);s.player.realm=num(p.realm,0,d.version<4?3:7,true);s.player.weapon=num(p.weapon,0,6,true);if(s.player.weapon>Math.min(6,2+s.player.realm*2))fail();
     if(d.version>=4)s.player.secondaryCd=num(p.secondaryCd,0,20);if(s.secondaryTechnique&&s.player.realm<1)fail();
     if(Object.values(s.techniques).includes(3)&&s.player.realm<1)fail();if(s.player.realm<CONTENT.MAPS[s.mapId].realmRequired)fail();
-    const st=stats(s);s.player.x=num(p.x,43,WIDTH-43);s.player.y=num(p.y,43,HEIGHT-43);if(blocked(p.x,p.y,17,s))fail();
-    s.player.hp=num(p.hp,0,st.maxHp);s.player.mp=num(p.mp,0,st.maxMp);
+    const st=stats(s);s.player.x=num(p.x,43,WIDTH-43);s.player.y=num(p.y,43,HEIGHT-43);if(d.version<6&&blocked(p.x,p.y,17,s))fail();
+    s.player.hp=num(p.hp,0,d.version>=6?1e8:st.maxHp);s.player.mp=num(p.mp,0,d.version>=6?1e8:st.maxMp);
     for(const id of [...Object.keys(CONTENT.RESOURCES),'potions'])s.player[id]=num(p[id],0,1e8,true);s.player.xp=num(p.xp,0,1e8);
     s.player.facing=num(p.facing,-Math.PI*2,Math.PI*2);for(const id of ['attackCd','skillCd','dashCd','invuln','hit','dashTime','shieldTime','slow'])s.player[id]=num(p[id],0,20);
-    s.player.shield=num(p.shield,0,st.maxHp*2);s.player.dashX=num(p.dashX,-1,1);s.player.dashY=num(p.dashY,-1,1);s.player.moving=!!p.moving;
+    s.player.shield=num(p.shield,0,d.version>=6?2e8:st.maxHp*2);s.player.dashX=num(p.dashX,-1,1);s.player.dashY=num(p.dashY,-1,1);s.player.moving=!!p.moving;
     s.dead=bool(d.dead);s.won=bool(d.won);if(s.dead!==(s.player.hp<=0))fail();s.meditationCd=num(d.meditationCd,0,60);
     const q=object(d.quests);s.quests={kills:num(q.kills,0,1e7,true),herbs:num(q.herbs,0,1e7,true),bosses:ids(q.bosses,['wolfKing','ancientTree','guardian'])};
     if(s.won!==s.quests.bosses.includes('guardian')||s.quests.kills<s.quests.bosses.length)fail();
     if(s.player.realm>=1&&!s.quests.bosses.includes('wolfKing')||s.player.realm>=2&&!s.quests.bosses.includes('ancientTree')||s.player.realm>=3&&!s.quests.bosses.includes('guardian'))fail();
     if(s.quests.bosses.includes('ancientTree')&&(!s.quests.bosses.includes('wolfKing')||s.player.realm<1)||s.quests.bosses.includes('guardian')&&(!s.quests.bosses.includes('ancientTree')||s.player.realm<2))fail();
     s.questRewards=ids(d.questRewards,['firstHunt','herbalist','veteran']);if(s.questRewards.includes('firstHunt')&&q.kills<5||s.questRewards.includes('veteran')&&q.kills<15||s.questRewards.includes('herbalist')&&q.herbs<6)fail();
-    const progress=object(d.progress);s.progress={visited:ids(progress.visited,Object.keys(CONTENT.MAPS)),bosses:ids(progress.bosses,[...new Set(Object.values(CONTENT.MAPS).flatMap(m=>m.spawns.map(v=>v[0])).filter(k=>ENEMY[k].realm!==undefined))]),gathered:{},claims:ids(progress.claims,Object.keys(CONTENT.SIDE_QUESTS))};
+    const progress=object(d.progress);s.progress={visited:ids(progress.visited,d.version<7?LEGACY_MAP_IDS:Object.keys(CONTENT.MAPS)),bosses:ids(progress.bosses,[...new Set(Object.values(CONTENT.MAPS).flatMap(m=>m.spawns.map(v=>v[0])).filter(k=>ENEMY[k].realm!==undefined))]),gathered:{},claims:ids(progress.claims,Object.keys(CONTENT.SIDE_QUESTS))};
     if(!s.progress.visited.includes('main')||!s.progress.visited.includes(s.mapId)||s.quests.bosses.some(b=>!s.progress.bosses.includes(b)))fail();
     if(s.progress.visited.some(id=>CONTENT.MAPS[id].realmRequired>s.player.realm)||s.progress.bosses.some(id=>ENEMY[id].realm>s.player.realm))fail();
     for(const [id,count]of Object.entries(object(progress.gathered))){if(!CONTENT.RESOURCES[id])fail();s.progress.gathered[id]=num(count,0,1e8,true);}
@@ -1232,6 +1300,9 @@
       const rapport=Math.min(10,choice.rapport+(claimed?2:0)+Object.keys(services).length);if(num(v.rapport,0,10,true)!==rapport)fail();
       s.npcProgress[id]={met:true,choice:choice.id,rapport,commission:{accepted,claimed,baseline},services};if(claimed&&npcMeasure(s,npc.commission)-(npc.commission.relative?baseline:0)<npc.commission.target)fail();
     }}
+    workshop.validate(d,s,d.version);journey.validate(d,s,d.version);worldlife.validate(d,s,d.version);
+    const finalStats=stats(s);s.player.hp=num(p.hp,0,finalStats.maxHp);s.player.mp=num(p.mp,0,finalStats.maxMp);s.player.shield=num(p.shield,0,finalStats.maxHp*2);
+    if(blocked(s.player.x,s.player.y,17,s))fail();
     if(!Array.isArray(d.projectiles)||d.projectiles.length>200)fail();s.projectiles=d.projectiles.map(v=>{
       if(!v||!['enemy','player'].includes(v.owner)||v.owner==='player'&&v.sourceId!=='player'||v.owner==='enemy'&&!s.enemies.some(e=>e.id===v.sourceId))fail();
       const b={x:num(v.x,0,WIDTH),y:num(v.y,0,HEIGHT),vx:num(v.vx,-1000,1000),vy:num(v.vy,-1000,1000),life:num(v.life,0,5),radius:num(v.radius,1,35),owner:v.owner,sourceId:v.sourceId,damage:num(v.damage,0,10000)};
@@ -1240,16 +1311,30 @@
       if(v.explosion!==undefined)b.explosion=num(v.explosion,0,300);if(v.pierce!==undefined)b.pierce=num(v.pierce,0,5,true);if(v.hits!==undefined)b.hits=ids(v.hits,s.enemies.map(e=>e.id),5);
       if(v.weaponKind!==undefined){if(!['sword','bow','staff'].includes(v.weaponKind))fail();b.weaponKind=v.weaponKind;}
       if(v.kind!==undefined){if(!['arrow','orb','spectralBlade','fireball'].includes(v.kind))fail();b.kind=v.kind;}
+      if(d.version<6&&['attackKind','techniqueId','windPrepared'].some(k=>v[k]!==undefined))fail();
+      if(v.attackKind!==undefined){if(v.owner!=='player'||v.attackKind!=='technique'||!s.techniques[v.techniqueId])fail();b.attackKind=v.attackKind;b.techniqueId=v.techniqueId;}else if(v.techniqueId!==undefined)fail();
+      if(v.windPrepared!==undefined){if(v.owner!=='player'||v.kind!=='arrow'||v.attackKind!==undefined||bool(v.windPrepared)!==true)fail();b.windPrepared=true;}
       if(v.angle!==undefined)b.angle=num(v.angle,-Math.PI*4,Math.PI*4);return b;
     });
     if(!Array.isArray(d.logs)||d.logs.length>6||d.logs.some(v=>typeof v!=='string'||v.length>200))fail();s.logs=d.logs.slice();s.effects=[];s.interaction=null;s.lastAction=null;
     updateGates(s);for(const e of s.enemies)if(e.hp>0&&e.mode==='windup')restoreAttackWarning(s,e);
     if(s.activity)for(const w of s.activity.warnings)effect(s,'warning',w.x,w.y,Math.max(.01,w.remaining),w.radius,{element:'thunder',color:'#d8acef',sourceId:'tribulation'});
+    if(s.journey.active)for(const w of s.journey.active.warnings)effect(s,'warning',w.x,w.y,w.remaining,w.radius,{element:w.element,color:w.element==='fire'?'#df9874':'#a4d6e7',sourceId:'journey'});
     for(const id of s.progress.claims){const entry=questsInfo(s).find(q=>q.id===id);if(entry.progress<entry.target)fail();}
     return s;
   }
 
+  function runtimeEnemySpec(e){if(e.activityEnemy)return activityEnemySpec(e.type,e.activityRealm,e.activityStage);const t=ENEMY[e.type];return e.routeEnemy?{...t,damage:t.damage*(1+e.routeRealm*.28),aggro:2500,range:(t.skin||e.type)==='spirit'?470:t.range}:t;}
+  function makeRouteEnemy(type,realm,stage,i,station){const angle=i*Math.PI*2/Math.max(2,4)-1.5,r=230,x=station.x+Math.cos(angle)*r,y=station.y+Math.sin(angle)*r,t=ENEMY[type],scale=Math.max(1,REALMS[realm].attack/18*.25),hp=Math.round(t.hp*scale);return{...enemyAt(type,x,y,i),id:`route-${stage}-${i}`,hp,maxHp:hp,routeEnemy:true,routeRealm:realm,burn:0,burnDamage:0,burnTick:0,slow:0,rooted:0,gated:false};}
+  function enterRoute(state,mapId){state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};if(!state.worlds[mapId]){state.worlds[mapId]=makeWorld(mapId);state.progress.visited.push(mapId);}state.mapId=mapId;state.player.x=550;state.player.y=1780;state.player.invuln=1;state.player.dashTime=0;state.projectiles=[];state.effects=[];state.interaction=null;}
+  function leaveRoute(state,origin){state.mapId=origin.mapId;const w=state.worlds[state.mapId];state.enemies=w.enemies;state.nodes=w.nodes;state.drops=w.drops;state.player.x=origin.x;state.player.y=origin.y;state.player.invuln=1;state.player.dashTime=0;state.projectiles=[];state.effects=[];state.interaction=null;}
+  function isSafeOrigin(state,origin){const q={...state,mapId:origin.mapId,player:{...state.player,x:origin.x,y:origin.y},activity:null,journey:{...state.journey,active:null}};return isSafe(q)&&!blocked(origin.x,origin.y,17,q);}
+  const helpers={isSafe,isSafeOrigin,stats,grant,pay,canPay,outcome,alchemyStation,sectReason,facilityInfo,log,effect,mapInfo,weaponInfo,techniqueInfo,npcInfo,distance,hurtPlayer,makeRouteEnemy,enterRoute,leaveRoute,relationshipBonus:(s,id)=>journey?journey.relationshipBonus(s,id):1,traitProductionBonus:(s,id)=>worldlife?worldlife.productionBonus(s,id):1,traitFatigueBonus:(s,id)=>worldlife?worldlife.fatigueBonus(s,id):1};
+  journey=createJourney(CONTENT,helpers);workshop=createWorkshop(CONTENT,helpers);worldlife=createWorldlife(CONTENT,helpers);
   return { createGame, step, interact, action, serialize, deserialize, stats, objective, zoneAt,
     mapInfo,isSafe,rootInfo,techniqueInfo,storyInfo,questsInfo,inventoryInfo,npcInfo,cultivationInfo,weaponInfo,sectInfo,activityInfo,siteInfo,daoInfo,alchemyInfo,CONTENT,
+    buildInfo:journey.buildInfo,retreatInfo:journey.retreatInfo,routeInfo:journey.routeInfo,expeditionInfo:journey.expeditionInfo,relationshipInfo:journey.relationshipInfo,relationshipBonus:journey.relationshipBonus,
+    workshopInfo:workshop.info,brewingInfo:workshop.brewingInfo,forgingInfo:workshop.forgingInfo,managementInfo:workshop.managementInfo,
+    worldNpcInfo:worldlife.worldNpcInfo,worldQuestInfo:worldlife.worldQuestInfo,talentInfo:worldlife.talentInfo,discipleTraitInfo:worldlife.discipleTraitInfo,worldlifeInfo:worldlife.worldlifeInfo,
     WIDTH, HEIGHT, HUB, PONDS, OBSTACLES, REALMS, NPCS, ENEMY };
 });

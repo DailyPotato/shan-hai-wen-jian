@@ -232,5 +232,120 @@
   const ALCHEMY_RECIPES={};for(const id of ['healing','tea','ward']){const r=RECIPES[id];ALCHEMY_RECIPES[id]={id,name:r.name,description:'以分阶段控火、凝丹炼制；策略影响实际产量，药效沿用丹方。',cost:{...r.cost},baseOutput:{...r.output},realmRequired:r.realmRequired};}
   const ALCHEMY_HEAT={low:{id:'low',label:'文火养性',description:'七秒温养。慢凝比原配方多得 2 份，快凝保持原产量。',duration:7,cost:{}},balanced:{id:'balanced',label:'平火调和',description:'五秒调和。慢凝多得 1 份，快凝保持原产量。',duration:5,cost:{}},high:{id:'high',label:'武火精炼',description:'另耗 1 赤焰砂，三秒精炼。慢凝多得 2 份；快凝会焦炼，少得 1 份，最低 1 份。',duration:3,cost:{ember:1}}};
   const ALCHEMY_SEAL={slow:{id:'slow',label:'慢凝聚元',description:'四秒凝结，完整保留控火策略带来的增产。',duration:4,cost:{}},fast:{id:'fast',label:'快凝收炉',description:'一秒收炉，文火与平火保持原产量；武火来不及调和，会损失产量。',duration:1,cost:{}}};
-  return{MAPS,TECHNIQUES,TECHNIQUE_DIRECTIONS,TECHNIQUE_GRADES,NPC_CHARACTERS,WEAPON_TYPES,EXPLORATION_SITES,ACTIVITIES,SECT_SUPPLIES,SECT_POSITIONS,SECT_FACILITIES,SECT_DISCIPLES,DAO_DIRECTIONS,DAO_NODES,ALCHEMY_RECIPES,ALCHEMY_HEAT,ALCHEMY_SEAL,ROOT_GRADES,ELEMENTS,RESOURCES,ITEMS,RECIPES,STORY,SIDE_QUESTS,TRIAL_REWARDS};
+  const MINDSETS={
+    burnHarvest:{id:'burnHarvest',name:'焚息归元',description:'命中已灼烧的敌人，收束余焰使本击伤害提高45%并返8灵力；消耗灼烧，每3秒一次。',requires:['flame'],conflicts:['rootFlame'],cooldown:3},
+    frostShatter:{id:'frostShatter',name:'碎霜剑意',description:'灵剑或灵弓命中减速敌人，伤害提高35%并短暂震慑；消耗减速，每3秒一次。',requires:['sword'],conflicts:[],cooldown:3},
+    rootFlame:{id:'rootFlame',name:'木火燎原',description:'火法命中缠根敌人，伤害提高60%，缠根转为持续灼烧；每4秒一次。',requires:['wood','flame'],conflicts:['burnHarvest'],cooldown:4},
+    shieldEcho:{id:'shieldEcho',name:'镇岳回锋',description:'护盾承受敌袭后，8秒内下一次近身普攻伤害提高60%并短暂震慑；每4秒一次。',requires:['earth'],conflicts:[],cooldown:4},
+    windStep:{id:'windStep',name:'踏风贯星',description:'闪避后3秒内发出的下一支普通灵箭贯穿两敌，实际命中提高35%伤害；每3秒一次。',requires:['arrow'],conflicts:[],cooldown:3},
+    cycleBreath:{id:'cycleBreath',name:'生息循环',description:'完成五行相生后4秒内，后一法实际命中额外返8灵力；每4秒一次。',requires:[],realmRequired:1,conflicts:[],cooldown:4}
+  };
+  const option=(id,label,description,enemies,cost,reward,extra={})=>({id,label,description,enemies,cost,reward,...extra});
+  const station=(name,description,x,y,options)=>({name,description,x,y,options});
+  const ROUTES={
+    herbTrail:{id:'herbTrail',name:'青竹寻药路',mapId:'main',realmRequired:0,description:'在药谷与竹阵之间选择护持、强采或辨药，带回炼丹所需草木。',cost:{stones:15,herbs:1},stations:[
+      station('谷口药坡','狼群围住了药坡。',900,1700,[option('guard','稳步护采','清理两只灵狼，留下根茎。',['wolf','wolf'],{}, {herbs:5,xp:45}),option('harvest','深入强采','药量更多，但招来四只灵狼。',['wolf','wolf','wolf','wolf'],{}, {herbs:9,xp:65})]),
+      station('竹影岔道','可以辨清竹影，也可闯入灵阵。',1700,1200,[option('identify','以灵木辨阵','消耗两份灵木，只有一只幽灵把守。',['spirit'],{spiritwood:2},{spiritwood:5,essence:1,xp:60}),option('raid','破阵寻根','两只幽灵与灵狼守住珍贵根脉。',['spirit','spirit','wolf'],{}, {spiritwood:6,core:1,xp:90})]),
+      station('药谷归途','药箱需要穿过最后一段山道。',2400,700,[option('escort','护送药箱','妖兽会袭击药箱；保全药箱可带回完整药材。',['wolf','spirit','wolf'],{}, {herbs:8,spiritwood:3,xp:100},{escort:true}),option('light','轻装带回','放下部分草木，只需击退两只幽灵。',['spirit','spirit'],{}, {herbs:3,essence:2,xp:80})])]},
+    emberConvoy:{id:'emberConvoy',name:'赤霄运材路',mapId:'red',realmRequired:1,description:'穿过火脉，将玄铁与赤焰砂运回，选择耗药绕行或带险护送。',cost:{stones:25,herbs:2},stations:[
+      station('熔风峡口','火砂散落在熔风之间。',900,1700,[option('cool','寒晶镇火','消耗两寒晶，避开落火。',['flameWolf','flameSpirit'],{frost:2},{ember:6,iron:3,xp:100}),option('rush','逆火取砂','三只火狼与落火同时袭来。',['flameWolf','flameWolf','flameSpirit'],{}, {ember:10,xp:160},{hazard:'fire'})]),
+      station('遗落矿车','矿车可救回，也可拆走灵髓。',1700,1200,[option('cart','护住矿车','石卫与幽灵袭击矿车。',['lavaGolem','flameSpirit','flameWolf'],{}, {iron:10,ember:3,xp:180},{escort:true}),option('salvage','拆车取髓','支付灵木重新支撑，击退两石卫。',['lavaGolem','lavaGolem'],{spiritwood:3},{essence:3,core:2,xp:150})]),
+      station('火脉封口','火脉守卫拦住回程。',2400,700,[option('ward','灵草护脉','付四份药草护住火脉，只战一座魔像。',['infernoIdol'],{herbs:4},{ember:6,essence:2,xp:220}),option('break','强破火阵','魔像与火灵结阵，持续落火。',['infernoIdol','flameSpirit'],{}, {ember:9,core:3,essence:3,xp:320},{hazard:'fire'})])]},
+    frostVault:{id:'frostVault',name:'北冥寻藏路',mapId:'snow',realmRequired:2,description:'在寒流与宝库间选择补给、搬运和守阵，寻得高阶破境灵材。',cost:{stones:35,herbs:2},stations:[
+      station('寒影旧营','寒流中有两条入库道路。',900,1700,[option('warm','赤砂暖阵','耗两份赤焰砂，免受寒流侵袭。',['iceWolf','iceSpirit'],{ember:2},{frost:7,xp:160}),option('ice','穿越寒流','更多寒晶，但落冰将限制身法。',['iceWolf','iceWolf','iceSpirit'],{}, {frost:11,xp:230},{hazard:'ice'})]),
+      station('冰莲藏箱','搬运藏箱会引来守卫。',1700,1200,[option('carry','护运藏箱','完整护送后获得灵髓与寒晶。',['iceGolem','iceSpirit','iceWolf'],{}, {frost:6,essence:4,xp:250},{escort:true}),option('open','原地破封','付两妖丹破封，迎战两冰卫。',['iceGolem','iceGolem'],{core:2},{core:3,essence:3,xp:190})]),
+      station('玄冰守阵','守阵灵主等待最后的决定。',2400,700,[option('stabilize','灵髓稳阵','耗两灵髓抑住落冰，只战水君。',['iceSovereign'],{essence:2},{core:4,frost:8,xp:350}),option('take','取走阵心','水君与幽灵同时攻来，落冰持续。',['iceSovereign','iceSpirit'],{}, {essence:5,core:5,xp:500},{hazard:'ice'})])]}
+  };
+  const RELATION_CONTRACTS={
+    elder:{support:'study',supportName:'长老论道',supportDescription:'120秒内真实修为所得提高15%，心法触发冷却缩短15%。',supportCost:{stones:20},rounds:[{name:'护山实证',kind:'kills',target:5,cost:{},reward:{xp:70,iron:2}},{name:'灵髓论道',kind:'delivery',target:2,item:'essence',cost:{essence:2},reward:{xp:120,stones:25}},{name:'剑意实证',kind:'kills',target:8,cost:{},reward:{xp:150,core:1}}]},
+    herbalist:{support:'herbal',supportName:'百草护持',supportDescription:'120秒内承伤降低10%，陆青禾照料生产速度提高15%。',supportCost:{herbs:3,stones:12},rounds:[{name:'新采药性',kind:'herbs',target:8,cost:{herbs:3},reward:{potions:3,xp:60}},{name:'寒晶药引',kind:'delivery',target:3,item:'frost',cost:{frost:3},reward:{spiritTea:2,xp:80}},{name:'寻药归来',kind:'herbs',target:12,cost:{herbs:5},reward:{wardPowder:2,xp:100}}]},
+    fireArtisan:{support:'artisan',supportName:'匠师传火',supportDescription:'120秒内沈炎明驻守产线速度提高20%，火法实际命中伤害提高10%。',supportCost:{ember:3,stones:15},rounds:[{name:'新取火砂',kind:'ember',target:6,cost:{ember:2},reward:{iron:4,xp:90}},{name:'清除火祟',kind:'kills',target:7,cost:{},reward:{ember:4,xp:120}},{name:'火髓成器',kind:'delivery',target:2,item:'core',cost:{core:2},reward:{essence:2,xp:140}}]},
+    disciple:{support:'escort',supportName:'同门护运',supportDescription:'120秒内路线护送目标承伤降低30%，闪避后获得一次踏风灵箭准备。',supportCost:{stones:18,herbs:2},rounds:[{name:'再证剑锋',kind:'kills',target:6,cost:{},reward:{iron:3,xp:80}},{name:'整备护山',kind:'delivery',target:4,item:'iron',cost:{iron:4},reward:{potions:2,xp:80}},{name:'远山护民',kind:'kills',target:10,cost:{},reward:{core:2,xp:150}}]}
+  };
+  const EXPANSION_MAP_IDS=['mistTown','tidePort','buriedPalace','skyRuins'];
+  const WORLD_NPCS={};
+  const worldNpc=(id,mapId,name,role,skin,description,dialogue,x,y,extra={})=>WORLD_NPCS[id]={id,mapId,name,role,skin,description,dialogue,x,y,color:'#d4c2a5',adult:true,...extra};
+  worldNpc('yueLing','mistTown','江月灵','30岁游侠女修','swordswoman','行走山海三十年的女剑修，护城时结识了你。','“有话直说，有难同担。同行的情分，须用真心与行动来换。”',600,1600,{romance:true,age:30,giftCost:{spiritwood:2,stones:15},companionEffect:'heal'});
+  worldNpc('emptyHand','mistTown','空空儿','小偷','thief','偷钱后躲进雾城的成年青年，愿用情报偿还欠债。','“我欠了债，也偷了钱。你可以交我去卫所，或让我亲手偿清。”',1030,1820);
+  worldNpc('cityGuard','mistTown','赵巡','城防卫长','guard','护住南城居民的老练守卫，先清巷患再修城防。','“百姓还在巷中，先肃清妖鼠，才能安稳补上缺口。”',1400,1680);
+  worldNpc('yunSheng','tidePort','沈云笙','28岁琴修','musician','以海潮入琴的成年女修，寻找遗落的旧曲。','“曲调不能催逼，人与人也一样。先听见对方，再谈往后。”',410,1670,{romance:true,age:28,giftCost:{frost:2,stones:20},companionEffect:'mana'});
+  worldNpc('seaCaptain','tidePort','罗青帆','女船长','captain','独眼船长指挥着归潮港的货船，用一柄弯刀斩断缆绳。','“潮落再起，船必须走。先把礁蟹赶出航路。”',650,1800);
+  worldNpc('oldFisher','tidePort','余翁','老渔夫','fisher','满身盐霜的渔夫，最懂海蛇翻浪的征兆。','“三道浪后便是蛇口。带些药，别只顾捞海底的亮东西。”',410,1950);
+  worldNpc('tombScholar','buriedPalace','秦砚','地宫学者','scholar','背着拓碑匣的学者，以墨线标记地宫旧路。','“这些镇卫还认旧令。让它们停止巡行，我们才有时间拓碑。”',350,1680);
+  worldNpc('pillMaster','buriedPalace','温素秋','35岁女丹师','alchemist','成年丹师用药篓与铜铃驱散毒虫，研究地下药性。','“毒与药只隔一道配比。请先清去蝎群，再取新采的灵草。”',650,1810,{age:35});
+  worldNpc('desertMonk','buriedPalace','行尘','行脚僧','monk','持禅杖守住残灯，劝人渡魂而不是掘取墓财。','“夺灵的灰蛾不除，这盏残灯便护不住后来人。”',390,1960);
+  worldNpc('skyMechanist','skyRuins','墨衡','天工匠师','mechanist','机关背架上装着量天仪，探查天墟浮台的失控构件。','“棱镜交叉的光束有节拍。看准它偏转，再靠近。”',380,1660);
+  worldNpc('starDiviner','skyRuins','观星子','观星师','diviner','执星盘的女观星师，计算浮空雷眼的落雷间隙。','“雷眼的环先亮，雷才落下。不能拿身子试天机。”',640,1790);
+  worldNpc('cloudHermit','skyRuins','白鹤叟','云海隐者','hermit','衣袍挂满风铃的隐者，居于云阶尽头。','“大鹏扑下前会收翼。让过那条风路，再谈问道。”',420,1950);
+  const frontier=(id,name,theme,realm,description,spawns,ponds,obstacles)=>{
+    const m=map(id,name,theme,realm,'frontier',description,ponds,obstacles,spawns,scatter(theme==='harbor'?'frost':theme==='crypt'?'iron':theme==='sky'?'essence':'spiritwood',[[830,1500],[1040,1910],[1120,1380],[1450,1560],[1650,1910],[1770,1300],[2130,1660],[2350,1220],[2660,1510],[2790,850],[2390,420],[1850,480],[1480,820],[1080,640],[2900,1980]]),[{id:'home',name:'青云归途',x:680,y:2050,target:'main'}]);
+    m.npcs=Object.values(WORLD_NPCS).filter(n=>n.mapId===id).map(n=>({...n}));m.npcs.push({id:'waygate',name:'山海驿阵',x:700,y:1740});return m;
+  };
+  MAPS.mistTown=frontier('mistTown','雾隐城','town',0,'南城商街与旧城巷道。妖鼠穿巷、飞贼夺财、墨祟远射；十二里市井也有修仙因缘。', [['gutterRat',1450,890],['gutterRat',1630,860],['gutterRat',1760,1130],['streetBandit',2070,950],['streetBandit',2460,1440],['streetBandit',2880,1130],['inkWraith',1190,520],['inkWraith',1980,450],['inkWraith',2670,480]],[],[{x:1150,y:1100,radius:105},{x:2190,y:1330,radius:120},{x:2560,y:860,radius:100}]);MAPS.mistTown.hub={x:980,y:1760,radius:610};MAPS.mistTown.start={x:820,y:1830};
+  MAPS.tidePort=frontier('tidePort','归潮港','harbor',1,'木栈桥、潮汐水道与礁滩。礁蟹正面硬甲、海妖以曲击退、盐海蛇翻身贯浪。',[['reefCrab',1090,1480],['reefCrab',1510,1990],['reefCrab',2100,1860],['tideSiren',1370,720],['tideSiren',2230,590],['tideSiren',2830,1560],['brineSerpent',1880,1130],['brineSerpent',2520,1040],['brineSerpent',2840,420]],[{x:1500,y:1280,rx:150,ry:340},{x:2360,y:1940,rx:280,ry:160}],[{x:930,y:940,radius:80},{x:2040,y:1490,radius:100},{x:2680,y:740,radius:75}]);
+  MAPS.buriedPalace=frontier('buriedPalace','沉沙地宫','crypt',2,'墓门、沉沙回廊与残灯祭台。毒蝎扇射、铜甲镇卫格挡冲撞、灰蛾夺取灵力。',[['sandScorpion',1130,1480],['sandScorpion',1730,1890],['sandScorpion',2730,1660],['tombSentinel',1850,1020],['tombSentinel',2570,660],['tombSentinel',2870,1110],['graveMoth',1150,650],['graveMoth',2080,430],['graveMoth',2450,2080]],[{x:1500,y:1050,rx:175,ry:230}],[{x:1040,y:1070,radius:85},{x:2120,y:1390,radius:95},{x:2700,y:1360,radius:95},{x:2230,y:770,radius:70}]);
+  MAPS.skyRuins=frontier('skyRuins','云上天墟','sky',3,'断裂云桥、悬浮平台与观星机关。云鹏长距扑击、棱镜环射、雷眼先警示后落雷。',[['cloudRoc',1040,1390],['cloudRoc',1760,1990],['cloudRoc',2850,1650],['prismConstruct',1590,840],['prismConstruct',2460,1120],['prismConstruct',2740,530],['stormEye',1110,550],['stormEye',2060,480],['stormEye',2310,2030]],[{x:1700,y:1480,rx:180,ry:130},{x:2480,y:1760,rx:170,ry:180}],[{x:1030,y:980,radius:80},{x:2070,y:1240,radius:90},{x:2670,y:840,radius:75}]);
+  MAPS.mistTown.roads=[[[420,1800],[980,1800],[1600,1800],[2800,1800]],[[980,2100],[980,1300],[980,480]],[[1600,1800],[1600,1150],[2850,1150]],[[980,480],[2200,480],[2850,480]]];
+  MAPS.tidePort.roads=[[[500,1800],[1000,1800],[1180,1580],[1200,650],[1980,650],[2850,400]],[[1000,1800],[1560,2020],[1900,2120],[1940,1740],[2110,1560],[2800,1460]],[[1800,1450],[2050,1070],[2550,1070],[2870,720]]];
+  MAPS.buriedPalace.roads=[[[500,1800],[1200,1800],[1200,1510],[1880,1510],[1880,870],[2570,870],[2850,580]],[[1200,1800],[1900,2160],[2540,2160],[2850,1660]],[[1200,1510],[1050,700],[1750,520],[2150,520]]];
+  MAPS.skyRuins.roads=[[[500,1800],[1160,1800],[1390,1540],[1390,1050],[1770,800],[2300,700],[2800,450]],[[1160,1800],[1760,2090],[2120,2090],[2180,1730],[2330,1360],[2850,1240]],[[1390,1050],[1350,550],[2080,480]],[[2330,1360],[2570,1330],[2890,1610]]];
+  MAPS.tidePort.nodes[3][1]=1150;MAPS.tidePort.spawns[2][1]=1950;MAPS.buriedPalace.nodes[12][1]=1350;MAPS.buriedPalace.nodes[12][2]=750;
+  const EXPANSION_ENEMIES={
+    gutterRat:{name:'噬灵妖鼠',bodyKind:'rat',behavior:'swarm',description:'贴地短促扑咬，退开后连扑。',hp:85,radius:16,speed:186,damage:9,xp:20,stones:10,aggro:400,range:80,element:'earth'},
+    streetBandit:{name:'雾巷飞贼',bodyKind:'bandit',behavior:'steal',description:'预告后突进，真实命中偷取至多12灵石；斩倒可夺回。',hp:150,radius:22,speed:164,damage:14,xp:30,stones:14,aggro:440,range:260,element:'wind'},
+    inkWraith:{name:'游墨书祟',bodyKind:'scroll',behavior:'ink',description:'保持远距，三道墨刃形成扇形封路。',hp:130,radius:25,speed:84,damage:12,xp:29,stones:16,aggro:510,range:390,element:'wood'},
+    reefCrab:{name:'铁礁巨蟹',bodyKind:'crab',behavior:'guard',description:'正面硬甲承伤减半，横移后双钳夹击。',hp:360,radius:34,speed:90,damage:24,xp:55,stones:24,aggro:410,range:115,element:'earth'},
+    tideSiren:{name:'潮音海妖',bodyKind:'siren',behavior:'song',description:'蓄曲后释放渐扩环射，近身余音击退并减速。',hp:250,radius:26,speed:80,damage:20,xp:50,stones:26,aggro:550,range:330,element:'water'},
+    brineSerpent:{name:'盐海长蛇',bodyKind:'serpent',behavior:'wave',description:'警示直线路径后翻浪冲锋，连发三道浪刃。',hp:410,radius:30,speed:115,damage:25,xp:66,stones:30,aggro:540,range:380,element:'water'},
+    sandScorpion:{name:'沉沙毒蝎',bodyKind:'scorpion',behavior:'poison',description:'三枚尾针造成木毒持续伤害，利用短距横移寻找侧面。',hp:490,radius:29,speed:115,damage:29,xp:74,stones:34,aggro:520,range:290,element:'wood'},
+    tombSentinel:{name:'铜甲镇墓卫',bodyKind:'sentinel',behavior:'brace',description:'蓄盾期间大幅减伤，随即突撞目标位置。',hp:760,radius:37,speed:74,damage:39,xp:95,stones:42,aggro:430,range:240,element:'metal'},
+    graveMoth:{name:'夺灵灰蛾',bodyKind:'moth',behavior:'drain',description:'绕身飞行，灵尘命中抽走灵力并回复自身。',hp:360,radius:24,speed:138,damage:26,xp:72,stones:35,aggro:560,range:310,element:'wood'},
+    cloudRoc:{name:'裂云大鹏',bodyKind:'roc',behavior:'dive',description:'远距收翼蓄势后俯冲，落点风压击退。',hp:850,radius:42,speed:155,damage:45,xp:125,stones:54,aggro:650,range:480,element:'wind'},
+    prismConstruct:{name:'七曜棱镜',bodyKind:'prism',behavior:'prism',description:'缓慢悬浮，旋转八向光刃穿过场地。',hp:730,radius:32,speed:55,damage:39,xp:112,stones:50,aggro:580,range:430,element:'metal'},
+    stormEye:{name:'浮空雷眼',bodyKind:'storm',behavior:'arc',description:'锁定你当时的位置，警示结束才落下雷柱；停留原地最危险。',hp:650,radius:34,speed:72,damage:48,xp:118,stones:52,aggro:640,range:500,element:'thunder'}
+  };
+  const WORLD_QUESTS={};
+  const wq=(id,npcId,name,description,kind,target,extra,reward,prerequisites=[])=>WORLD_QUESTS[id]={id,npcId,mapId:WORLD_NPCS[npcId].mapId,name,description,kind,target,...extra,reward,prerequisites};
+  wq('moonSteel','yueLing','月下除匪','接取后斩倒3名雾巷飞贼，保护返城商旅。','kill',3,{enemyType:'streetBandit'},{xp:90,stones:35,iron:3});
+  wq('moonPromise','yueLing','同行之约','将新铸剑所需6玄铁交给月灵，约定共同护城。','delivery',6,{item:'iron',cost:{iron:6}},{xp:120,wardPowder:2},['moonSteel']);
+  wq('thiefDebts','emptyHand','失窃的钱袋','接取后追缴2名飞贼；失窃灵石须从实际战利品中夺回。','kill',2,{enemyType:'streetBandit'},{xp:70,stones:25});
+  wq('thiefRepay','emptyHand','偿清旧债','交付30灵石作赔偿押金，空空儿随后接受你的处置。','delivery',30,{item:'stones',cost:{stones:30}},{xp:85,spiritwood:3},['thiefDebts']);
+  wq('cityRats','cityGuard','鼠患围城','接取后清掉4只噬灵妖鼠，妖鼠会在远离后再现。','kill',4,{enemyType:'gutterRat'},{xp:90,herbs:4,stones:25});
+  wq('cityMending','cityGuard','补城的药材','接取后再采6份灵草，为城防伤者备药。','gather',6,{resource:'herbs'},{xp:95,potions:3},['cityRats']);
+  wq('tideSong','yunSheng','被吞去的潮曲','接取后驱散3只潮音海妖，找回港湾安静的夜。','kill',3,{enemyType:'tideSiren'},{xp:170,frost:3,stones:40});
+  wq('tideTrust','yunSheng','琴心相知','交付4寒晶修复琴弦；她会询问你是否愿意继续同行。','delivery',4,{item:'frost',cost:{frost:4}},{xp:200,spiritTea:3},['tideSong']);
+  wq('captainCrabs','seaCaptain','清开货道','接取后斩倒3只铁礁巨蟹；从侧背攻击避开硬甲。','kill',3,{enemyType:'reefCrab'},{xp:160,iron:4,stones:45});
+  wq('captainTimber','seaCaptain','修补归潮船','交付5灵木修船，换来船长的货路补给。','delivery',5,{item:'spiritwood',cost:{spiritwood:5}},{xp:190,core:2,stones:50},['captainCrabs']);
+  wq('fisherSerpent','oldFisher','三浪之后','接取后斩倒2条盐海长蛇，避让预告的翻浪冲锋。','kill',2,{enemyType:'brineSerpent'},{xp:175,herbs:5,stones:45});
+  wq('fisherReturn','oldFisher','送药回城','接取后返回一次雾隐城，再回港向余翁报平安。','visit',1,{targetMap:'mistTown'},{xp:190,potions:4},['fisherSerpent']);
+  wq('scholarGuards','tombScholar','不再巡行的旧令','接取后停止3座铜甲镇墓卫，注意蓄盾时的减伤。','kill',3,{enemyType:'tombSentinel'},{xp:260,essence:2,stones:70});
+  wq('scholarInk','tombScholar','拓碑留名','交付2灵髓固定旧碑灵纹，避免遗文再被沉沙淹没。','delivery',2,{item:'essence',cost:{essence:2}},{xp:300,earthBook:1,core:2},['scholarGuards']);
+  wq('pillScorpion','pillMaster','毒尾入药','接取后清理3只沉沙毒蝎，尾针造成持续木毒。','kill',3,{enemyType:'sandScorpion'},{xp:245,herbs:6,potions:3});
+  wq('pillFreshHerbs','pillMaster','地下的新药性','接取后采得10份新灵草，旧库存不能充当采药证据。','gather',10,{resource:'herbs'},{xp:280,insightPill:2},['pillScorpion']);
+  wq('monkMoths','desertMonk','残灯渡魂','接取后驱散3只夺灵灰蛾，避免被灵尘抽空灵力。','kill',3,{enemyType:'graveMoth'},{xp:250,core:2,stones:65});
+  wq('monkIncense','desertMonk','供灯不掘墓','交付3妖丹维持残灯，换来行尘珍藏的护体药。','delivery',3,{item:'core',cost:{core:3}},{xp:310,wardPowder:4},['monkMoths']);
+  wq('mechanistPrism','skyMechanist','校正失控棱镜','接取后击破3座七曜棱镜，利用八向光刃之间的空隙。','kill',3,{enemyType:'prismConstruct'},{xp:390,iron:6,stones:90});
+  wq('mechanistMaterials','skyMechanist','重建云阶','交付4灵髓与4玄铁修补云阶机关。','delivery',4,{item:'essence',cost:{essence:4,iron:4}},{xp:450,thunderBook:1,core:3},['mechanistPrism']);
+  wq('divinerStorm','starDiviner','雷眼的空隙','接取后熄灭3只浮空雷眼，离开被锁定的落雷地点。','kill',3,{enemyType:'stormEye'},{xp:380,essence:3,stones:85});
+  wq('divinerHarbor','starDiviner','海天共一线','接取后游历一次归潮港，测回海面与云阶的灵脉差。','visit',1,{targetMap:'tidePort'},{xp:430,frost:6,insightPill:2},['divinerStorm']);
+  wq('hermitRocs','cloudHermit','让过裂云的风','接取后击退3只裂云大鹏，收翼预告后避开落点。','kill',3,{enemyType:'cloudRoc'},{xp:400,core:3,stones:100});
+  wq('hermitOffering','cloudHermit','云海问心','交付6灵木与2灵髓，借隐者风铃守住云海驿站。','delivery',6,{item:'spiritwood',cost:{spiritwood:6,essence:2}},{xp:500,heavenCharm:1},['hermitRocs']);
+  const TALENTS={};
+  const talent=(id,path,name,description,effects,prerequisite=null,realmRequired=0)=>TALENTS[id]={id,path,name,description,effects,cost:1,realmRequired,prerequisites:prerequisite?[prerequisite]:[]};
+  talent('martialBody','martial','炼体根基','气血上限增加24。',{maxHp:24});talent('martialEdge','martial','锋锐','攻击增加5。',{attack:5},'martialBody');talent('martialGuard','martial','守正','防御增加3。',{defense:3},'martialEdge',1);talent('martialStep','martial','轻捷','移动速度增加18。',{speed:18},'martialGuard',2);talent('martialResolve','martial','坚韧','实际承伤降低8%。',{incoming:.92},'martialStep',3);talent('martialMaster','martial','剑心通明','气血上限增加60，攻击增加12。',{maxHp:60,attack:12},'martialResolve',4);
+  talent('spiritPool','spirit','灵池','灵力上限增加20。',{maxMp:20});talent('spiritBreath','spirit','吐纳','每秒灵力回复额外增加0.6。',{manaRegen:.6},'spiritPool');talent('spiritEconomy','spirit','省灵','Q/F法术耗灵乘0.92，最低耗灵仍为12。',{spellMana:.92},'spiritBreath',1);talent('spiritFire','spirit','焰心','火系实际命中伤害提高10%。',{fireDamage:1.1},'spiritEconomy',2);talent('spiritFrost','spirit','冰魄','冰系实际命中伤害提高10%。',{iceDamage:1.1},'spiritFire',3);talent('spiritMaster','spirit','百脉通灵','灵力上限增加40，灵力回复额外增加1。',{maxMp:40,manaRegen:1},'spiritFrost',4);
+  talent('lifeLore','life','闻道','真实修为所得提高6%。',{xp:1.06});talent('lifeGather','life','辨药','普通采集产量提高15%，向上取整；不增加妖丹灵髓。',{gather:1.15},'lifeLore');talent('lifeArtisan','life','工巧','新调度生产速度提高8%。',{production:1.08},'lifeGather',1);talent('lifePatience','life','耐心','新调度弟子疲劳增长降低10%。',{fatigue:.9},'lifeArtisan',2);talent('lifeCompanion','life','同行','道侣战中护持的冷却由12秒缩短至9秒。',{companionCooldown:9},'lifePatience',3);talent('lifeMaster','life','山海阅历','真实修为所得再提高10%，气血上限增加30。',{xp:1.1,maxHp:30},'lifeCompanion',4);
+  const DISCIPLE_TRAITS={
+    diligent:{id:'diligent',name:'勤恳',description:'生产速度提高15%，疲劳增长提高10%。',production:1.15,fatigue:1.1},
+    hothead:{id:'hothead',name:'性急',description:'生产速度提高25%，疲劳增长提高45%；在战中为你增加2攻击。',production:1.25,fatigue:1.45,stats:{attack:2}},
+    idle:{id:'idle',name:'游手好闲',description:'生产速度降低20%，疲劳增长降低45%；精力充沛时额外回复0.2灵力/秒。',production:.8,fatigue:.55,stats:{manaRegen:.2}},
+    careful:{id:'careful',name:'一丝不苟',description:'生产速度降低8%，疲劳增长降低25%，为你增加1防御。',production:.92,fatigue:.75,stats:{defense:1}},
+    hardy:{id:'hardy',name:'吃苦耐劳',description:'生产速度提高5%，疲劳增长降低15%。',production:1.05,fatigue:.85},
+    gifted:{id:'gifted',name:'心灵手巧',description:'生产速度提高18%，疲劳增长提高20%。',production:1.18,fatigue:1.2},
+    spirited:{id:'spirited',name:'灵气亲和',description:'生产速度提高5%，增加10灵力上限；疲劳增长提高5%。',production:1.05,fatigue:1.05,stats:{maxMp:10}},
+    loyal:{id:'loyal',name:'重情重义',description:'生产速度提高8%，为你增加12气血上限；疲劳增长提高10%。',production:1.08,fatigue:1.1,stats:{maxHp:12}}
+  };
+  const DISCIPLE_INNATE={qinghe:'diligent',yanming:'hothead',ruoshui:'idle'};
+  for(const catalog of [WORLD_NPCS,WORLD_QUESTS,EXPANSION_ENEMIES,TALENTS,DISCIPLE_TRAITS,DISCIPLE_INNATE])Object.setPrototypeOf(catalog,null);
+  return{MAPS,TECHNIQUES,TECHNIQUE_DIRECTIONS,TECHNIQUE_GRADES,NPC_CHARACTERS,WEAPON_TYPES,EXPLORATION_SITES,ACTIVITIES,SECT_SUPPLIES,SECT_POSITIONS,SECT_FACILITIES,SECT_DISCIPLES,DAO_DIRECTIONS,DAO_NODES,ALCHEMY_RECIPES,ALCHEMY_HEAT,ALCHEMY_SEAL,MINDSETS,ROUTES,RELATION_CONTRACTS,EXPANSION_MAP_IDS,EXPANSION_ENEMIES,WORLD_NPCS,WORLD_QUESTS,TALENTS,DISCIPLE_TRAITS,DISCIPLE_INNATE,ROOT_GRADES,ELEMENTS,RESOURCES,ITEMS,RECIPES,STORY,SIDE_QUESTS,TRIAL_REWARDS};
 });
