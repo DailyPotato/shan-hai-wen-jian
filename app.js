@@ -76,7 +76,7 @@
     if (!value) return '';
     if (typeof value === 'string') return value;
     if (Array.isArray(value)) return value.map(entry => typeof entry === 'string' ? entry : `${itemInfo(entry.id || entry.item).name} × ${entry.count || entry.amount || 1}`).join(' · ');
-    return Object.entries(value).filter(([,n]) => typeof n === 'number' && n > 0).map(([id,n]) => `${id==='xp'?'修为':resourceInfo(id).name === id ? itemInfo(id).name : resourceInfo(id).name} ${n}`).join(' · ');
+    return Object.entries(value).filter(([,n]) => typeof n === 'number' && n > 0).map(([id,n]) => `${id==='xp'?'修为':id==='contribution'?'宗门贡献':resourceInfo(id).name === id ? itemInfo(id).name : resourceInfo(id).name} ${n}`).join(' · ');
   };
   const keys = new Set();
   const npcNames = {master:'凌云真人',forge:'铸剑台',alchemy:'灵药炉',shrine:'归元祠',waygate:'山海渡口',merchant:'云游商人',storyteller:'守卷人',sect:'宗门事务',cultivation:'太清静修坛'};
@@ -533,7 +533,7 @@
     $('mp-value').textContent = `${Math.max(0,Math.ceil(p.mp))} / ${s.maxMp}`;
     $('xp-fill').style.width = `${(finalRealm() ? 100 : clamp(p.xp/s.xpNeeded*100,0,100))}%`;
     const activity=typeof Xian.activityInfo==='function'?Xian.activityInfo(state):null;
-    $('objective').textContent = activity?.objective || Xian.objective(state);
+    $('objective').textContent = activity?.completed || activity?.failed ? Xian.objective(state) : activity?.objective || Xian.objective(state);
     const zone = Xian.zoneAt(p.x,p.y,state);
     if (zone.name !== lastZone) {lastZone = zone.name;$('zone-name').textContent = zone.name;}
     const map=currentMap(),r=Xian.rootInfo(state),tech=Xian.techniqueInfo(state);
@@ -590,15 +590,16 @@
     const panel=$('activity-panel');panel.classList.toggle('hidden',!activity);
     if(!activity){activityMarkup='';return;}
     const maxFloors=activity.type==='tower'?activity.maxFloors || 5:0,maxWaves=activity.type==='defense'?activity.maxWaves || 3:0;
-    const progress=maxFloors?`第 ${activity.floor || activity.stage || 1} / ${maxFloors} 层`:maxWaves?`第 ${activity.wave || activity.stage || 1} / ${maxWaves} 波`:activity.type==='tribulation'?`${activity.rank}重雷劫`:'宗门历练';
+    const progress=activity.completed?'历练完成':maxFloors?`第 ${activity.floor || activity.stage || 1} / ${maxFloors} 层`:maxWaves?`第 ${activity.wave || activity.stage || 1} / ${maxWaves} 波`:activity.type==='tribulation'?`${activity.rank}重雷劫`:'宗门历练';
     const target=activity.type==='bounty'?(state.enemies || []).length:activity.target || 0;
-    const completed=activity.type==='bounty'?Math.max(0,target-(activity.remainingEnemies || 0)):activity.phase==='choice'&&activity.type==='tower'?activity.floor || activity.stage:activity.progress || 0;
+    const completed=activity.completed?target:activity.type==='bounty'?Math.max(0,target-(activity.remainingEnemies || 0)):activity.phase==='choice'&&activity.type==='tower'?activity.floor || activity.stage:activity.progress || 0;
     const completion=target>0?clamp(completed/target*100,0,100):0;
     const progressLabel=activity.type==='tribulation'?`已存活 ${Math.floor(completed)} / ${Math.ceil(target)} 秒`:activity.type==='bounty'?`已击败 ${Math.floor(completed)} / ${target}`:activity.type==='tower'?`已通过 ${Math.floor(completed)} / ${target} 层`:`已击退 ${Math.floor(completed)} / ${target} 波`;
     const crystal=activity.crystal;
     const choices=activity.choices || [];
     const warnings=(activity.warnings || []).map(w=>typeof w==='string'?w:w.message || w.description || w.name || '雷劫将至，离开预警区域').filter(Boolean);
-    const markup=`<div class="activity-heading"><span class="eyebrow">${esc(progress)}</span><button data-engine="activity:leave" ${activity.canLeave===false?'disabled':''}>退出历练 ↗</button></div><h3>${esc(activity.name)}</h3><p>${esc(activity.objective || activity.description || '')}</p>${target>0?`<div class="activity-progress"><span>${esc(progressLabel)}</span><i style="width:${completion}%"></i></div>`:''}${Number.isFinite(activity.timeRemaining)?`<div class="activity-time">${activity.type==='defense'?'守护剩余':'历练剩余'} <strong>${Math.max(0,Math.ceil(activity.timeRemaining))} 秒</strong></div>`:''}${crystal?`<div class="activity-crystal"><span>阵心 ${Math.ceil(crystal.hp)} / ${crystal.maxHp}</span><div><i style="width:${clamp(crystal.hp/crystal.maxHp*100,0,100)}%"></i></div></div>`:''}${warnings.length?`<p class="activity-warning">${esc([...new Set(warnings)].slice(-2).join(' · '))}</p>`:''}${choices.length?`<div class="activity-blessings">${choices.map(choice=>{const id=typeof choice==='string'?choice:choice.id;return `<button data-engine="activity:blessing:${esc(id)}"><strong>${esc(choice.label || choice.name || id)}</strong><small>${esc(choice.description || '')}</small></button>`;}).join('')}</div>`:''}`;
+    const resultMarkup=activity.completed?`<p class="activity-warning">${Object.keys(activity.reward || {}).length?`奖励已收取：${esc(resourcesText(activity.reward))}`:'额外奖励已达上限，通关记录已保存。'}</p><div class="activity-time"><span>自动返回青云宗</span><strong>${Math.max(0,Math.ceil(activity.returnRemaining ?? 2))} 秒</strong></div>`:'';
+    const markup=`<div class="activity-heading"><span class="eyebrow">${esc(progress)}</span><button data-engine="activity:leave" ${activity.canLeave===false?'disabled':''}>${activity.completed?'立即返回 ↗':'退出历练 ↗'}</button></div><h3>${esc(activity.name)}</h3><p>${esc(activity.objective || activity.description || '')}</p>${target>0?`<div class="activity-progress"><span>${esc(progressLabel)}</span><i style="width:${completion}%"></i></div>`:''}${!activity.completed&&Number.isFinite(activity.timeRemaining)?`<div class="activity-time">${activity.type==='defense'?'守护剩余':'历练剩余'} <strong>${Math.max(0,Math.ceil(activity.timeRemaining))} 秒</strong></div>`:''}${resultMarkup}${crystal?`<div class="activity-crystal"><span>阵心 ${Math.ceil(crystal.hp)} / ${crystal.maxHp}</span><div><i style="width:${clamp(crystal.hp/crystal.maxHp*100,0,100)}%"></i></div></div>`:''}${warnings.length?`<p class="activity-warning">${esc([...new Set(warnings)].slice(-2).join(' · '))}</p>`:''}${choices.length?`<div class="activity-blessings">${choices.map(choice=>{const id=typeof choice==='string'?choice:choice.id;return `<button data-engine="activity:blessing:${esc(id)}"><strong>${esc(choice.label || choice.name || id)}</strong><small>${esc(choice.description || '')}</small></button>`;}).join('')}</div>`:''}`;
     if(markup!==activityMarkup){activityMarkup=markup;panel.innerHTML=markup;}
   }
   function drawMap() {
@@ -656,8 +657,10 @@
     if(state){
       const active = !modalKind && !document.hidden;
       if(active){
-        const beforeHp=state.player.hp,beforeAttack=state.player.attackCd,beforeDash=state.player.dashCd,beforeSkill=state.player.skillCd,beforeSecondary=state.player.secondaryCd || 0;
+        const beforeHp=state.player.hp,beforeAttack=state.player.attackCd,beforeDash=state.player.dashCd,beforeSkill=state.player.skillCd,beforeSecondary=state.player.secondaryCd || 0,beforeActivity=state.activity,beforeActivityPhase=beforeActivity?.phase;
         Xian.step(state,input(),dt);
+        if(state.activity?.phase==='complete'&&beforeActivityPhase!=='complete'){save();sound.fx('success');}
+        if(beforeActivity&&!state.activity){pointer.moved=false;mapSelection=state.mapId;lastZone='';mapArrival();updateHUD();save();}
         if(state.player.hp<beforeHp-.1)sound.fx('hurt');
         if(state.player.attackCd>beforeAttack+.1)sound.fx('attack');
         if(state.player.dashCd>beforeDash+.1)sound.fx('dash');

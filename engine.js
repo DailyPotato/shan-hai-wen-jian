@@ -271,7 +271,7 @@
   function activityInfo(state){
     const a=state.activity;if(!a)return null;const c=CONTENT.ACTIVITIES[a.type];
     const choices=a.phase==='choice'?[{id:'blade',label:'剑意',description:'本次历练道术伤害提高 8%。'},{id:'vital',label:'回元',description:'立即恢复 35% 气血，后续每层恢复 15%。'},{id:'spirit',label:'凝神',description:'本次历练道术冷却缩短 6%，恢复 35% 灵力。'}]:[];
-    return{type:a.type,id:a.type,name:c.name,phase:a.phase,stage:a.stage,wave:a.type==='defense'?a.stage:1,maxWaves:a.type==='defense'?3:1,floor:a.type==='tower'?a.stage:1,maxFloors:a.type==='tower'?5:1,rank:a.rank,timeRemaining:a.type==='tribulation'?Math.max(0,a.duration-a.elapsed):null,progress:a.type==='tribulation'?a.elapsed:a.stage-1,target:a.type==='tower'?5:a.type==='defense'?3:a.type==='tribulation'?a.duration:1,objective:c.description,crystal:a.crystal?{...a.crystal}:null,remainingEnemies:state.enemies.filter(e=>e.hp>0).length,choices,completed:a.phase==='complete',failed:a.phase==='failed',canLeave:true,description:a.type==='tower'?`第 ${a.stage}/5 层 · ${['疾行狼群','缠根灵阵','远射妖灵','重甲石卫','镇塔妖主'][a.stage-1]}`:c.description,blessings:{...a.blessings},warnings:a.warnings.map(w=>({...w})),reward:a.reward||null};
+    return{type:a.type,id:a.type,name:c.name,phase:a.phase,stage:a.stage,wave:a.type==='defense'?a.stage:1,maxWaves:a.type==='defense'?3:1,floor:a.type==='tower'?a.stage:1,maxFloors:a.type==='tower'?5:1,rank:a.rank,timeRemaining:a.type==='tribulation'?Math.max(0,a.duration-a.elapsed):null,returnRemaining:a.phase==='complete'?a.returnRemaining:null,progress:a.type==='tribulation'?a.elapsed:a.stage-1,target:a.type==='tower'?5:a.type==='defense'?3:a.type==='tribulation'?a.duration:1,objective:c.description,crystal:a.crystal?{...a.crystal}:null,remainingEnemies:state.enemies.filter(e=>e.hp>0).length,choices,completed:a.phase==='complete',failed:a.phase==='failed',canLeave:true,description:a.type==='tower'?`第 ${a.stage}/5 层 · ${['疾行狼群','缠根灵阵','远射妖灵','重甲石卫','镇塔妖主'][a.stage-1]}`:c.description,blessings:{...a.blessings},warnings:a.warnings.map(w=>({...w})),reward:a.reward||null};
   }
   function activityEnemySpec(type,realm,stage){const b=ENEMY[type],scale=type==='sectBounty'?1+(realm-1)*.35:1+realm*.48+(stage-1)*.28;return{...b,hp:Math.round(b.hp*scale),damage:b.damage*(1+realm*.22+(stage-1)*.12),speed:b.speed*(type==='sectWolf'?1.15:1),aggro:2000,range:type==='sectSpirit'?500:b.range};}
   function makeActivityWorld(type,realm,stage){
@@ -283,24 +283,28 @@
     const m=sectInfo(state).missions.find(m=>m.id===type);if(!m||!m.available)return outcome(state,'sect:mission:'+type,false,m&&m.reason||'未知历练。');
     state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};
     const rank=type==='tribulation'?clamp(state.player.realm-3,1,3):1;
-    state.activity={type,mapId:m.mapId,realm:state.player.realm,rank,stage:1,phase:'fight',elapsed:0,duration:30+rank*10,nextStrike:1,warnings:[],blessings:{blade:0,vital:0,spirit:0},crystal:type==='defense'?{x:1700,y:1200,maxHp:800+state.player.realm*220,hp:800+state.player.realm*220}:null,world:makeActivityWorld(type,state.player.realm,1),rewarded:false,reward:null};
+    state.activity={type,mapId:m.mapId,realm:state.player.realm,rank,stage:1,phase:'fight',elapsed:0,duration:30+rank*10,nextStrike:1,warnings:[],blessings:{blade:0,vital:0,spirit:0},crystal:type==='defense'?{x:1700,y:1200,maxHp:800+state.player.realm*220,hp:800+state.player.realm*220}:null,world:makeActivityWorld(type,state.player.realm,1),rewarded:false,reward:null,returnRemaining:null};
     bindActivityWorld(state);state.player.x=1550;state.player.y=1400;state.player.invuln=1.5;state.player.dashTime=0;state.projectiles=[];state.effects=[];state.interaction=null;
     return outcome(state,'sect:mission:'+type,true,`${m.name}开始。可随时从宗门面板退出历练。`);
   }
   function leaveActivity(state){
     if(!state.activity)return outcome(state,'activity:leave',false,'当前没有宗门历练。');
+    const completed=state.activity.phase==='complete',name=CONTENT.ACTIVITIES[state.activity.type].name;if(completed)settleActivityDrops(state);
     state.activity=null;state.mapId='sect';const w=state.worlds.sect||(state.worlds.sect=makeWorld('sect'));state.enemies=w.enemies;state.nodes=w.nodes;state.drops=w.drops;state.player.x=1600;state.player.y=1800;state.player.dashTime=0;state.player.invuln=1;state.projectiles=[];state.effects=[];state.interaction=null;
-    return outcome(state,'activity:leave',true,'已返回青云宗。未完成的历练不发放通关奖励。');
+    return outcome(state,'activity:leave',true,completed?`${name}已通关，奖励与掉落已收入背包。已返回青云宗。`:'已返回青云宗。未完成的历练不发放通关奖励。');
+  }
+  function settleActivityDrops(state){
+    if(!state.activity)return;const reward={};for(const drop of state.drops)reward[drop.type]=(reward[drop.type]||0)+drop.amount;grant(state,reward);state.drops=[];state.activity.world.drops=state.drops;
   }
   function completeActivity(state){
     const a=state.activity;if(a.rewarded)return;const c=CONTENT.ACTIVITIES[a.type],count=state.sect.records[a.type];let reward={};
     if(a.type==='tribulation'){const first=!state.sect.tribulationRanks.includes(a.rank);if(first){reward={...c.firstReward,xp:[5500,8500,12000][a.rank-1],core:7+a.rank,essence:5+a.rank};state.sect.tribulationRanks.push(a.rank);state.sect.tribulationBest=Math.max(state.sect.tribulationBest,a.rank);}else if(count<c.rewardLimit*3)reward=c.repeatReward;}
     else reward=count===0?c.firstReward:count<c.rewardLimit?c.repeatReward:{};
-    state.sect.records[a.type]++;grant(state,reward);a.reward={...reward};a.rewarded=true;a.phase='complete';a.warnings=[];state.projectiles=[];state.effects=state.effects.filter(e=>e.type!=='warning');log(state,`${c.name}完成。${Object.keys(reward).length?'奖励已收入背包。':'额外奖励已达上限。'}`);
+    state.sect.records[a.type]++;grant(state,reward);a.reward={...reward};a.rewarded=true;a.phase='complete';a.returnRemaining=2;settleActivityDrops(state);a.warnings=[];state.projectiles=[];state.effects=state.effects.filter(e=>e.type!=='warning');log(state,`${c.name}完成。${Object.keys(reward).length?'奖励已收入背包。':'额外奖励已达上限。'}两秒后自动返回青云宗。`);
   }
   function advanceActivity(state){const a=state.activity;a.stage++;a.phase='fight';a.world=makeActivityWorld(a.type,a.realm,a.stage);bindActivityWorld(state);state.projectiles=[];state.effects=[];state.player.x=1550;state.player.y=1400;state.player.invuln=1;const s=stats(state);if(a.blessings.vital)state.player.hp=Math.min(s.maxHp,state.player.hp+s.maxHp*.15*a.blessings.vital);}
   function activityStep(state,dt){
-    const a=state.activity;if(!a)return;a.world={enemies:state.enemies,nodes:state.nodes,drops:state.drops};if(a.phase!=='fight')return;
+    const a=state.activity;if(!a)return;a.world={enemies:state.enemies,nodes:state.nodes,drops:state.drops};if(a.phase==='complete'){a.returnRemaining=Math.max(0,a.returnRemaining-dt);if(a.returnRemaining<=1e-9)leaveActivity(state);return;}if(a.phase!=='fight')return;
     if(state.dead){a.phase='failed';a.warnings=[];state.projectiles=[];state.effects=state.effects.filter(e=>e.type!=='warning');return;}
     if(a.crystal&&a.crystal.hp<=0){a.phase='failed';a.warnings=[];state.projectiles=[];state.effects=state.effects.filter(e=>e.type!=='warning');log(state,'灵脉晶石破碎，守护失败。退出后可重新挑战。');return;}
     if(a.type==='tribulation'){
@@ -979,7 +983,7 @@
   function objective(state) {
     const p = state.player, s = stats(state);
     if (state.dead) return '灵身已散 · 点击重聚灵身，返回安全据点';
-    if(state.activity){const a=activityInfo(state);return a.completed?`${a.name}已完成 · 奖励已领取，退出返回宗门`:a.failed?`${a.name}失败 · 退出后可重新挑战`:a.phase==='choice'?'镇妖塔 · 选择一项祝福再登下一层':a.type==='tribulation'?`${a.rank} 重雷劫 · 避开落雷，再坚持 ${Math.ceil(a.timeRemaining)} 秒`:a.type==='defense'?`护脉守护 · 第 ${a.wave}/3 波 · 晶石 ${Math.ceil(a.crystal.hp)}/${a.crystal.maxHp}`:`${a.name} · ${a.type==='tower'?`第 ${a.floor}/5 层 · `:''}剩余 ${a.remainingEnemies} 敌`;}
+    if(state.activity){const a=activityInfo(state);return a.completed?`${a.name}已完成 · 奖励已领取 · ${Math.ceil(a.returnRemaining)} 秒后自动返回青云宗`:a.failed?`${a.name}失败 · 退出后可重新挑战`:a.phase==='choice'?'镇妖塔 · 选择一项祝福再登下一层':a.type==='tribulation'?`${a.rank} 重雷劫 · 避开落雷，再坚持 ${Math.ceil(a.timeRemaining)} 秒`:a.type==='defense'?`护脉守护 · 第 ${a.wave}/3 波 · 晶石 ${Math.ceil(a.crystal.hp)}/${a.crystal.maxHp}`:`${a.name} · ${a.type==='tower'?`第 ${a.floor}/5 层 · `:''}剩余 ${a.remainingEnemies} 敌`;}
     if(state.mapId==='sect')return !state.sect.joined?'青云宗 · 在宗门面板加入山门，试用灵弓与法杖':p.realm<1?'青云宗 · 备齐兵器丹药，出山击败苍牙，筑基后开启宗门经营':`${s.realmName}修行 · 经营设施、领取成果；${cultivationInfo(state).ready?'可在破境坛突破':cultivationInfo(state).reason}`;
     const m=mapInfo(state);if(m.type==='trial')return m.trial.cleared?'秘境已通关 · 返回入口退出，重新进入可挑战':`${m.name} · 第 ${m.trial.wave}/3 重试炼 · ${state.enemies.filter(e=>e.wave===m.trial.wave&&e.hp>0).length} 个敌人`;
     if(m.id!=='main'){const boss=m.id==='red'?'flameLord':'frostWyrm';return state.progress.bosses.includes(boss)?`${m.name} · 采集灵材、探索秘境与推进山海志`:`${m.name} · 寻找并击败${ENEMY[boss].name}`;}
@@ -1147,6 +1151,7 @@
       const v=object(d.activity),catalog=CONTENT.ACTIVITIES[v.type];if(!catalog||!s.sect.joined||s.mapId!=='sect'||v.mapId!==catalog.mapId)fail();
       const realm=num(v.realm,catalog.realmRequired,s.player.realm,true),rank=num(v.rank,1,3,true),stage=num(v.stage,1,v.type==='tower'?5:v.type==='defense'?3:1,true);if(rank!==(v.type==='tribulation'?clamp(realm-3,1,3):1)||!['fight','choice','complete','failed'].includes(v.phase)||v.phase==='choice'&&(v.type!=='tower'||stage>=5))fail();
       const duration=num(v.duration,30+rank*10,30+rank*10),elapsed=num(v.elapsed,0,duration+.05),nextStrike=num(v.nextStrike,-.05,2),blessings=object(v.blessings),rewarded=bool(v.rewarded);if(rewarded!==(v.phase==='complete'))fail();
+      const returnRemaining=v.phase==='complete'?v.returnRemaining===undefined?2:num(v.returnRemaining,0,2):null;if(v.phase!=='complete'&&v.returnRemaining!==undefined&&v.returnRemaining!==null)fail();
       const counts={};for(const id of ['blade','vital','spirit'])counts[id]=num(blessings[id],0,4,true);if(Object.values(counts).reduce((a,b)=>a+b,0)!==(v.type==='tower'?stage-1:0))fail();
       let crystal=null;if(v.type==='defense'){const c=object(v.crystal),maxHp=800+realm*220;if(c.x!==1700||c.y!==1200||c.maxHp!==maxHp)fail();crystal={x:c.x,y:c.y,maxHp,hp:num(c.hp,0,maxHp)};if(c.hp<=0&&v.phase!=='failed')fail();}else if(v.crystal!==null)fail();
       if(!Array.isArray(v.warnings)||v.warnings.length>9||v.type!=='tribulation'&&v.warnings.length)fail();const warnings=v.warnings.map(w=>{object(w);return{x:num(w.x,43,WIDTH-43),y:num(w.y,43,HEIGHT-43),remaining:num(w.remaining,0,.95),radius:num(w.radius,75+rank*10,75+rank*10)};});
@@ -1154,7 +1159,7 @@
       world.enemies.forEach((e,i)=>{const b=object(saved.enemies[i]);if(b.id!==e.id||b.type!==e.type||b.maxHp!==e.maxHp||b.wave!==stage||b.activityRealm!==realm||b.activityStage!==stage||b.activityEnemy!==true)fail();e.x=num(b.x,43,WIDTH-43);e.y=num(b.y,43,HEIGHT-43);e.hp=num(b.hp,0,e.maxHp);for(const id of ['hit','attackTimer','cooldown','stun','burn','burnTick','slow','rooted'])e[id]=num(b[id],0,20);e.burnDamage=num(b.burnDamage,0,10000);e.respawn=num(b.respawn,0,1e9);e.phase=num(b.phase,0,1e8,true);e.patrol=num(b.patrol,0,1e9);e.attackX=num(b.attackX,0,WIDTH);e.attackY=num(b.attackY,0,HEIGHT);e.facing=num(b.facing,-Math.PI*2,Math.PI*2);if(!['patrol','chase','windup','return'].includes(b.mode))fail();e.mode=b.mode;e.telegraph=e.mode==='windup'?e.attackTimer:0;if(b.attackTarget!==undefined){if(!['player','crystal'].includes(b.attackTarget)||b.attackTarget==='crystal'&&v.type!=='defense')fail();e.attackTarget=b.attackTarget;}});
       if(v.phase==='choice'&&world.enemies.some(e=>e.hp>0)||v.phase==='complete'&&v.type!=='tribulation'&&world.enemies.some(e=>e.hp>0))fail();world.drops=loadDrops(saved.drops);
       let reward=null;if(v.reward!==null){object(v.reward);reward={};for(const[id,n]of Object.entries(v.reward)){if(id!=='xp'&&id!=='contribution'&&!CONTENT.RESOURCES[id])fail();reward[id]=num(n,0,15000);}}if(!rewarded&&reward!==null)fail();
-      s.activity={type:v.type,mapId:v.mapId,realm,rank,stage,phase:v.phase,duration,elapsed,nextStrike,blessings:counts,crystal,warnings,world,rewarded,reward};bindActivityWorld(s);if(blocked(s.player.x,s.player.y,17,s))fail();
+      s.activity={type:v.type,mapId:v.mapId,realm,rank,stage,phase:v.phase,duration,elapsed,nextStrike,blessings:counts,crystal,warnings,world,rewarded,reward,returnRemaining};bindActivityWorld(s);if(blocked(s.player.x,s.player.y,17,s))fail();if(v.phase==='complete'){settleActivityDrops(s);s.activity.warnings=[];}
     }
     s.npcProgress={};if(d.version>=3){for(const [id,v]of Object.entries(object(d.npcProgress))){const npc=CONTENT.NPC_CHARACTERS[id];if(!npc||!s.progress.visited.includes(npc.mapId))fail();object(v);if(bool(v.met)!==true)fail();const choice=npc.choices.find(c=>c.id===v.choice);if(!choice)fail();const c=object(v.commission),accepted=bool(c.accepted),claimed=bool(c.claimed),baseline=num(c.baseline,0,1e7,true);if(claimed&&!accepted||!accepted&&baseline!==0||!npc.commission&&(accepted||claimed||baseline!==0)||npc.commission&&!npc.commission.relative&&baseline!==0)fail();if(npc.commission&&baseline>npcMeasure(s,npc.commission))fail();
       const services={};for(const [serviceId,record]of Object.entries(object(v.services))){const service=(npc.services||[]).find(service=>service.id===serviceId);if(!service)fail();object(record);services[serviceId]={uses:num(record.uses,1,1e7,true),lastAt:num(record.lastAt,0,s.time)};if(record.lastAt<(record.uses-1)*service.cooldown-1e-6)fail();}

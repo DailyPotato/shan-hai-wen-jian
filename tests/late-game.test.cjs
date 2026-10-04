@@ -56,7 +56,7 @@ function naturalBot(s){
 // Rich wallets are only used to isolate costs and boundary rules in the following unit tests.
 function fixture(){const s=X.deserialize(V3);checked(s,'travel:sect');checked(s,'sect:join');for(const k of Object.keys(C.RESOURCES))s.player[k]=10000;s.player.xp=100000;s.sect.contribution=10000;s.sect.totalContribution=10000;return s;}
 const facility=(s,id)=>X.sectInfo(s).facilities.find(f=>f.id===id);
-function battleFixture(s,e){s.player.x=e.x-65;s.player.y=e.y;for(let i=0;i<6000&&e.hp>0;i++){s.player.invuln=20;for(const foe of s.enemies)foe.stun=20;X.step(s,{attack:true,skill:true,aimX:e.x,aimY:e.y},.05);}assert.equal(e.hp,0,e.type);}
+function battleFixture(s,e){const dx=1700-e.x,dy=1200-e.y,d=Math.hypot(dx,dy)||1;s.player.x=e.x+dx/d*65;s.player.y=e.y+dy/d*65;for(let i=0;i<6000&&e.hp>0;i++){s.player.invuln=20;for(const foe of s.enemies)foe.stun=20;X.step(s,{attack:true,skill:true,aimX:e.x,aimY:e.y},.05);}assert.equal(e.hp,0,e.type);}
 function clearFightActivity(s){let guard=0;while(X.activityInfo(s)?.phase==='fight'||X.activityInfo(s)?.phase==='choice'){assert.ok(guard++<20);if(X.activityInfo(s).phase==='choice'){checked(s,'activity:blessing:blade');continue;}for(const e of s.enemies.filter(e=>e.hp>0))battleFixture(s,e);}assert.equal(X.activityInfo(s).phase,'complete');}
 
 test('35 fixed manuscripts have five distinct names, profiles and sources per direction and reject promotion',()=>{
@@ -142,6 +142,43 @@ test('activity worlds never replace permanent maps and active fight, tower choic
   }
 });
 
+const activityRewards=s=>({wallet:Object.fromEntries([...Object.keys(C.RESOURCES),'xp','potions'].map(k=>[k,s.player[k]])),inventory:{...s.inventory},contribution:s.sect.contribution,totalContribution:s.sect.totalContribution,records:{...s.sect.records},towerBest:s.sect.towerBest,tribulationBest:s.sect.tribulationBest,tribulationRanks:[...s.sect.tribulationRanks]});
+const assertReturned=(s,permanent,rewards)=>{assert.equal(s.mapId,'sect');assert.equal(s.activity,null);assert.equal(X.activityInfo(s),null);assert.equal(X.isSafe(s),true);assert.equal(s.enemies,s.worlds.sect.enemies);assert.equal(s.nodes,s.worlds.sect.nodes);assert.deepEqual(s.drops,s.worlds.sect.drops);assert.deepEqual(permanentWorlds(JSON.parse(X.serialize(s)).worlds),permanent);assert.deepEqual(activityRewards(s),rewards);};
+
+test('all four successful activities automatically return after two seconds and countdown saves never repeat rewards',()=>{
+  for(const type of ['bounty','defense','tower','tribulation']){
+    const s=fixture();if(type==='tribulation'){s.player.realm=4;s.sect.towerBest=5;s.sect.records.tower=1;s.player.hp=X.stats(s).maxHp;s.player.mp=X.stats(s).maxMp;}
+    const permanent=permanentWorlds(JSON.parse(X.serialize(s)).worlds),records=s.sect.records[type];checked(s,'sect:mission:'+type);
+    if(type==='tribulation'){while(X.activityInfo(s).phase==='fight'){s.player.invuln=20;X.step(s,{},.05);}}else clearFightActivity(s);
+    assert.equal(X.activityInfo(s).phase,'complete');assert.equal(X.activityInfo(s).returnRemaining,2);assert.equal(s.sect.records[type],records+1);assert.ok(s.activity.rewarded);assert.equal(s.drops.length,0);
+    const rewards=activityRewards(s),completed=JSON.parse(X.serialize(s));
+    // Previous v4 complete saves had neither a return timer nor any automatic exit.
+    const old=structuredClone(completed);delete old.activity.returnRemaining;const legacy=X.deserialize(JSON.stringify(old));assert.equal(X.activityInfo(legacy).returnRemaining,2);assert.deepEqual(activityRewards(legacy),rewards);advance(legacy,1.95);assert.equal(X.activityInfo(legacy).phase,'complete');advance(legacy,.1);assertReturned(legacy,permanent,rewards);
+    advance(s,1.2);assert.ok(Math.abs(X.activityInfo(s).returnRemaining-.8)<1e-9);const restored=X.deserialize(X.serialize(s));assert.equal(X.activityInfo(restored).returnRemaining,X.activityInfo(s).returnRemaining);assert.deepEqual(activityRewards(restored),rewards);
+    advance(restored,.7);assert.equal(X.activityInfo(restored).phase,'complete');advance(restored,.15);assertReturned(restored,permanent,rewards);advance(restored,3);assert.deepEqual(activityRewards(restored),rewards);
+    advance(s,.75);assert.equal(X.activityInfo(s).phase,'complete');advance(s,.1);assertReturned(s,permanent,rewards);
+    for(const value of [null,-.1,2.1]){const invalid=structuredClone(completed);invalid.activity.returnRemaining=value;assert.throws(()=>X.deserialize(JSON.stringify(invalid)));}
+  }
+});
+
+test('success settles uncollected activity stones once, including legacy completed saves',()=>{
+  const s=fixture();checked(s,'sect:mission:bounty');s.drops.push({x:100,y:100,type:'stones',amount:17});
+  // Isolate the final-clear accounting; actual activity combat is covered above and in the natural run.
+  for(const e of s.enemies)e.hp=0;
+  const stones=s.player.stones;X.step(s,{},.05);assert.equal(s.player.stones,stones+17+C.ACTIVITIES.bounty.firstReward.stones);assert.equal(s.drops.length,0);
+  const rewards=activityRewards(s),old=JSON.parse(X.serialize(s));delete old.activity.returnRemaining;old.activity.world.drops.push({x:100,y:100,type:'stones',amount:23});const legacy=X.deserialize(JSON.stringify(old)),expected=structuredClone(rewards);expected.wallet.stones+=23;
+  assert.deepEqual(activityRewards(legacy),expected);assert.equal(legacy.drops.length,0);const reloaded=X.deserialize(X.serialize(legacy));assert.deepEqual(activityRewards(reloaded),expected);advance(reloaded,2.05);assert.equal(reloaded.activity,null);assert.deepEqual(activityRewards(reloaded),expected);
+  checked(s,'activity:leave');assert.match(s.lastAction.message,/返回/);assert.doesNotMatch(s.lastAction.message,/未完成/);assert.deepEqual(activityRewards(s),rewards);
+});
+
+test('tower choices and failed defense wait for player action instead of automatically returning',()=>{
+  const tower=fixture();checked(tower,'sect:mission:tower');for(const e of tower.enemies.filter(e=>e.hp>0))battleFixture(tower,e);assert.equal(X.activityInfo(tower).phase,'choice');assert.equal(X.activityInfo(tower).returnRemaining,null);advance(tower,3);assert.equal(X.activityInfo(tower).phase,'choice');assert.equal(tower.activity.stage,1);assert.equal(tower.sect.records.tower,0);
+  const choice=X.deserialize(X.serialize(tower));advance(choice,3);assert.equal(X.activityInfo(choice).phase,'choice');checked(choice,'activity:blessing:spirit');assert.equal(choice.activity.stage,2);assert.equal(X.activityInfo(choice).phase,'fight');const invalid=JSON.parse(X.serialize(choice));invalid.activity.returnRemaining=1;assert.throws(()=>X.deserialize(JSON.stringify(invalid)));checked(choice,'activity:leave');assert.equal(choice.activity,null);
+  const defense=fixture(),permanent=permanentWorlds(JSON.parse(X.serialize(defense)).worlds);checked(defense,'sect:mission:defense');defense.activity.crystal.hp=1;defense.player.x=2000;defense.player.y=1450;
+  for(let i=0;i<2000&&X.activityInfo(defense).phase==='fight';i++){defense.player.invuln=20;X.step(defense,{},.05);}
+  assert.equal(X.activityInfo(defense).phase,'failed');assert.equal(defense.sect.records.defense,0);assert.equal(X.activityInfo(defense).returnRemaining,null);const rewards=activityRewards(defense);advance(defense,3);assert.equal(X.activityInfo(defense).phase,'failed');const failedSave=X.deserialize(X.serialize(defense));advance(failedSave,3);assert.equal(X.activityInfo(failedSave).phase,'failed');checked(failedSave,'activity:leave');assertReturned(failedSave,permanent,rewards);
+});
+
 test('facility output follows actual gameplay, assignment, matching elements, capacity and manual claim',()=>{
   const s=fixture();for(const id of Object.keys(C.SECT_FACILITIES)){const before=economic(s),cost=facility(s,id).upgradeCost;checked(s,'sect:upgrade:'+id);for(const[k,n]of Object.entries(cost))assert.equal(k==='contribution'?s.sect.contribution:s.player[k],(k==='contribution'?before.sect.contribution:before.player[k])-n);}
   advance(s,100);assert.ok(Object.values(s.sect.facilities).every(f=>f.progress===0&&f.stored===0));
@@ -178,7 +215,8 @@ test('authentic earned character explores twelve sites, manages disciples, clear
   for(const site of Object.values(C.EXPLORATION_SITES)){if(s.mapId!==site.mapId)bot.travel(site.mapId);bot.walk(site);X.interact(s);assert.equal(s.interaction,'site:'+site.id);checked(s,'site:'+site.id);}
   bot.travel('sect');checked(s,'sect:upgrade:garden');checked(s,'sect:assign:garden:qinghe');checked(s,'craft:ironBow');checked(s,'craft:spiritStaff');
   checked(s,'equip:ironBow');checked(s,'technique:arrow');bot.travel('main');const remote=s.enemies.find(e=>e.hp>0&&!e.boss&&!e.gated);assert.ok(remote);bot.fight(remote);bot.travel('sect');checked(s,'equip:flameSword');checked(s,'technique:flame_immortal');
-  function activity(type){bot.hub();checked(s,'sect:mission:'+type);let rounds=0;while(X.activityInfo(s).phase!=='complete'){assert.ok(rounds++<30);assert.notEqual(X.activityInfo(s).phase,'failed');if(X.activityInfo(s).phase==='choice'){checked(s,'activity:blessing:vital');continue;}for(const e of s.enemies.filter(e=>e.hp>0))bot.fight(e);}clears++;assert.doesNotThrow(()=>X.deserialize(X.serialize(s)));checked(s,'activity:leave');assert.equal(s.mapId,'sect');}
+  function returnNaturally(){let frames=0;while(s.activity){assert.ok(frames++<45,'Successful activity should return within two gameplay seconds');assert.equal(X.activityInfo(s).phase,'complete');assert.ok(bot.frame());}assert.equal(s.mapId,'sect');assert.equal(X.isSafe(s),true);}
+  function activity(type){bot.hub();checked(s,'sect:mission:'+type);let rounds=0;while(X.activityInfo(s).phase!=='complete'){assert.ok(rounds++<30);assert.notEqual(X.activityInfo(s).phase,'failed');if(X.activityInfo(s).phase==='choice'){checked(s,'activity:blessing:vital');continue;}for(const e of s.enemies.filter(e=>e.hp>0))bot.fight(e);}clears++;assert.doesNotThrow(()=>X.deserialize(X.serialize(s)));returnNaturally();}
   activity('bounty');activity('defense');activity('tower');assert.equal(s.sect.towerBest,5);checked(s,'breakthrough');assert.equal(s.player.realm,4);
   checked(s,'sect:recruit:yanming');checked(s,'sect:recruit:ruoshui');checked(s,'sect:upgrade:forge');checked(s,'sect:upgrade:library');checked(s,'sect:assign:forge:yanming');checked(s,'sect:assign:library:ruoshui');checked(s,'sect:position:forge:south');
   checked(s,'equip:spiritStaff');checked(s,'technique:flame_immortal');
@@ -186,7 +224,7 @@ test('authentic earned character explores twelve sites, manages disciples, clear
     bot.hub();checked(s,'sect:mission:tribulation');assert.equal(X.activityInfo(s).rank,rank);while(X.activityInfo(s).phase==='fight'){
       const w=s.activity.warnings.find(w=>Math.hypot(s.player.x-w.x,s.player.y-w.y)<w.radius+55);let mx=0,my=0;if(w){mx=s.player.x-w.x||1;my=s.player.y-w.y||-1;const l=Math.hypot(mx,my);mx/=l;my/=l;}else{const dx=1700-s.player.x,dy=1200-s.player.y,d=Math.hypot(dx,dy);if(d>330){mx=dx/d;my=dy/d;}}
       assert.ok(bot.frame({mx,my,dash:!!w}));
-    }assert.equal(X.activityInfo(s).phase,'complete');clears++;checked(s,'activity:leave');
+    }assert.equal(X.activityInfo(s).phase,'complete');clears++;returnNaturally();
     while(s.player.xp<X.cultivationInfo(s).xpNeeded)activity('tower');checked(s,'breakthrough');assert.equal(s.player.realm,rank+4);
   }
   for(const id of Object.keys(C.SECT_FACILITIES)){if(s.sect.facilities[id].stored>0)checked(s,'sect:claim:'+id);}
