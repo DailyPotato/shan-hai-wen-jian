@@ -217,5 +217,20 @@
     library:{id:'library',name:'藏经阁',description:'弟子整理古卷，提供修为与灵髓；水位相契。',preferredElement:'water',position:'north',duration:75,reward:{xp:55,essence:1}}
   };
   const SECT_DISCIPLES={qinghe:{id:'qinghe',name:'陆青禾',element:'wood',realmRequired:0,recruitCost:{}},yanming:{id:'yanming',name:'沈炎明',element:'fire',realmRequired:2,recruitCost:{contribution:45,stones:40}},ruoshui:{id:'ruoshui',name:'林若水',element:'water',realmRequired:3,recruitCost:{contribution:70,stones:60}}};
-  return{MAPS,TECHNIQUES,TECHNIQUE_DIRECTIONS,TECHNIQUE_GRADES,NPC_CHARACTERS,WEAPON_TYPES,EXPLORATION_SITES,ACTIVITIES,SECT_SUPPLIES,SECT_POSITIONS,SECT_FACILITIES,SECT_DISCIPLES,ROOT_GRADES,ELEMENTS,RESOURCES,ITEMS,RECIPES,STORY,SIDE_QUESTS,TRIAL_REWARDS};
+  const DAO_DIRECTIONS={sword:{id:'sword',name:'剑道',description:'凝练近身剑锋、身法与以战养气。'},bow:{id:'bow',name:'弓道',description:'灵箭的威力、弹速与贯穿。'},art:{id:'art',name:'术道',description:'五行连携、灵力调度与采集效率。'}};
+  const DAO_NODES={
+    sword_edge:{id:'sword_edge',direction:'sword',name:'锋芒',description:'灵剑近身普攻伤害提高 12%。',cost:1,realmRequired:0,prerequisites:[],effects:{swordDamage:1.12}},
+    sword_flow:{id:'sword_flow',direction:'sword',name:'流云',description:'灵剑普攻射程增加 18，攻击间隔缩短 12%。',cost:2,realmRequired:2,prerequisites:['sword_edge'],effects:{swordRangeBonus:18,swordCooldown:.88}},
+    sword_return:{id:'sword_return',direction:'sword',name:'剑气归元',description:'近身剑击实际造成伤害的 8% 回复气血，每次攻击最多回复气血上限的 4%。',cost:3,realmRequired:4,prerequisites:['sword_flow'],effects:{swordLeech:.08,swordLeechCap:.04}},
+    bow_focus:{id:'bow_focus',direction:'bow',name:'穿云',description:'灵弓普攻箭矢伤害提高 12%。',cost:1,realmRequired:0,prerequisites:[],effects:{bowDamage:1.12}},
+    bow_wind:{id:'bow_wind',direction:'bow',name:'追风',description:'灵弓普攻弹速提高 18%，攻击间隔缩短 15%。',cost:2,realmRequired:2,prerequisites:['bow_focus'],effects:{bowSpeed:1.18,bowCooldown:.85}},
+    bow_pierce:{id:'bow_pierce',direction:'bow',name:'贯星',description:'普通灵箭可贯穿两名敌人，继续使用真实飞行与碰撞判定。',cost:3,realmRequired:4,prerequisites:['bow_wind'],effects:{bowPierce:2}},
+    art_cycle:{id:'art_cycle',direction:'art',name:'五行流转',description:'木火土金水木相生的衔接窗口由 6 秒延长到 8 秒。',cost:1,realmRequired:0,prerequisites:[],effects:{comboWindow:8}},
+    art_breath:{id:'art_breath',direction:'art',name:'调息通灵',description:'Q/F 道术耗灵减少 10%，五行相生返灵由 6 提高到 10。最低耗灵仍为 12。',cost:2,realmRequired:2,prerequisites:['art_cycle'],effects:{spellMana:.9,comboRefund:10}},
+    art_harvest:{id:'art_harvest',direction:'art',name:'寻脉辨药',description:'普通野外采集产量提高 25%，向上取整；稀有妖丹与灵髓、遗迹和掉落不增产。',cost:3,realmRequired:4,prerequisites:['art_breath'],effects:{gatherYield:1.25}}
+  };
+  const ALCHEMY_RECIPES={};for(const id of ['healing','tea','ward']){const r=RECIPES[id];ALCHEMY_RECIPES[id]={id,name:r.name,description:'以分阶段控火、凝丹炼制；策略影响实际产量，药效沿用丹方。',cost:{...r.cost},baseOutput:{...r.output},realmRequired:r.realmRequired};}
+  const ALCHEMY_HEAT={low:{id:'low',label:'文火养性',description:'七秒温养。慢凝比原配方多得 2 份，快凝保持原产量。',duration:7,cost:{}},balanced:{id:'balanced',label:'平火调和',description:'五秒调和。慢凝多得 1 份，快凝保持原产量。',duration:5,cost:{}},high:{id:'high',label:'武火精炼',description:'另耗 1 赤焰砂，三秒精炼。慢凝多得 2 份；快凝会焦炼，少得 1 份，最低 1 份。',duration:3,cost:{ember:1}}};
+  const ALCHEMY_SEAL={slow:{id:'slow',label:'慢凝聚元',description:'四秒凝结，完整保留控火策略带来的增产。',duration:4,cost:{}},fast:{id:'fast',label:'快凝收炉',description:'一秒收炉，文火与平火保持原产量；武火来不及调和，会损失产量。',duration:1,cost:{}}};
+  return{MAPS,TECHNIQUES,TECHNIQUE_DIRECTIONS,TECHNIQUE_GRADES,NPC_CHARACTERS,WEAPON_TYPES,EXPLORATION_SITES,ACTIVITIES,SECT_SUPPLIES,SECT_POSITIONS,SECT_FACILITIES,SECT_DISCIPLES,DAO_DIRECTIONS,DAO_NODES,ALCHEMY_RECIPES,ALCHEMY_HEAT,ALCHEMY_SEAL,ROOT_GRADES,ELEMENTS,RESOURCES,ITEMS,RECIPES,STORY,SIDE_QUESTS,TRIAL_REWARDS};
 });

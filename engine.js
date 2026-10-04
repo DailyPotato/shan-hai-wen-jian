@@ -109,11 +109,11 @@
     const blessings=state.activity&&state.activity.blessings||{blade:0,spirit:0};
     const learnRequirements=(t.requiredTrials||[]).map(id=>CONTENT.MAPS[id].name+'首通'),baseReason=state.dead?'先重聚灵身。':!isSafe(state)?'请返回安全驿站。':level?'已习得此法。':state.player.realm<t.requiredRealm?`需要${REALMS[t.requiredRealm].realmName}境。`:(t.requiredTrials||[]).some(id=>!state.trials[id].rewarded)?'需完成 '+learnRequirements.join('、')+'。':'';
     const learnReason=baseReason||!(state.inventory[id+'Book']>0)&&'缺少对应经卷。'||'',acquireReason=baseReason||sectReason(state)||state.inventory[id+'Book']>0&&'背包已有此经卷。'||!canPay(state,t.acquireCost||{})&&'需要 '+costText(t.acquireCost)+'。'||'';
-    const comboElement=t.element==='ice'?'water':Object.keys(GENERATES).includes(t.element)?t.element:null,comboReady=!!comboElement&&state.combo&&state.combo.until>state.time&&GENERATES[state.combo.element]===comboElement;
-    return {...t,level,known:level>0,maxLevel:3,affinity,multiplier:(1+affinity)*(1+Math.max(0,level-1)*.22)*grade.multiplier*weaponBonus*(1+blessings.blade*.08),manaCost:Math.max(12,Math.floor((t.manaCost-(direct&&!r.legacy?2:0))*(1-grade.manaReduction))),cooldown:Math.max(3,(t.cooldown-Math.max(0,level-1)*.4)*(1-grade.cooldownReduction)*(1-blessings.spirit*.06)),trainCost:level===1?{stones:45,[t.resource]:3,herbs:2}:{stones:110,[t.resource]:6,core:2},trainRealm:level>=2?1:0,grade:grade.id,gradeName:grade.name,gradeColor:grade.color,gradeIndex,gradeMultiplier:grade.multiplier,preferredWeapon,weaponCompatible,weaponBonus,comboElement,comboReady,comboMultiplier:comboReady?1.25:1,learnRealm:t.requiredRealm,learnRequirements,canLearn:!learnReason,learnReason,canAcquire:!acquireReason,acquireReason,source:t.acquisition,canPromote:false,promoteReason:'功法品阶由经卷固定，不能提升品阶。',promoteCost:null};
+    const dao=daoEffects(state),comboElement=t.element==='ice'?'water':Object.keys(GENERATES).includes(t.element)?t.element:null,comboReady=!!comboElement&&state.combo&&state.combo.until>state.time&&GENERATES[state.combo.element]===comboElement;
+    return {...t,level,known:level>0,maxLevel:3,affinity,multiplier:(1+affinity)*(1+Math.max(0,level-1)*.22)*grade.multiplier*weaponBonus*(1+blessings.blade*.08),manaCost:Math.max(12,Math.floor(Math.floor((t.manaCost-(direct&&!r.legacy?2:0))*(1-grade.manaReduction))*dao.spellMana)),cooldown:Math.max(3,(t.cooldown-Math.max(0,level-1)*.4)*(1-grade.cooldownReduction)*(1-blessings.spirit*.06)),trainCost:level===1?{stones:45,[t.resource]:3,herbs:2}:{stones:110,[t.resource]:6,core:2},trainRealm:level>=2?1:0,grade:grade.id,gradeName:grade.name,gradeColor:grade.color,gradeIndex,gradeMultiplier:grade.multiplier,preferredWeapon,weaponCompatible,weaponBonus,comboElement,comboReady,comboMultiplier:comboReady?1.25:1,comboWindow:dao.comboWindow,comboRefund:dao.comboRefund,learnRealm:t.requiredRealm,learnRequirements,canLearn:!learnReason,learnReason,canAcquire:!acquireReason,acquireReason,source:t.acquisition,canPromote:false,promoteReason:'功法品阶由经卷固定，不能提升品阶。',promoteCost:null};
   }
 
-  function weaponInfo(state){const itemId=state.equipment&&state.equipment.weapon||'starterSword',item=CONTENT.ITEMS[itemId],kind=item.weaponKind||'sword',type=CONTENT.WEAPON_TYPES[kind];return{...type,id:kind,itemId,name:item.name,kind,compatibleTechniques:Object.values(CONTENT.TECHNIQUES).filter(t=>t.preferredWeapon===kind).map(t=>t.id)};}
+  function weaponInfo(state){const itemId=state.equipment&&state.equipment.weapon||'starterSword',item=CONTENT.ITEMS[itemId],kind=item.weaponKind||'sword',type=CONTENT.WEAPON_TYPES[kind],dao=daoEffects(state);return{...type,id:kind,itemId,name:item.name,kind,range:type.range+(kind==='sword'?dao.swordRangeBonus:0),cooldown:type.cooldown*(kind==='sword'?dao.swordCooldown:kind==='bow'?dao.bowCooldown:1),damageMultiplier:type.damageMultiplier*(kind==='sword'?dao.swordDamage:kind==='bow'?dao.bowDamage:1),projectileSpeed:type.projectileSpeed*(kind==='bow'?dao.bowSpeed:1),pierce:kind==='bow'?dao.bowPierce:0,leech:kind==='sword'?dao.swordLeech:0,leechCap:dao.swordLeechCap,compatibleTechniques:Object.values(CONTENT.TECHNIQUES).filter(t=>t.preferredWeapon===kind).map(t=>t.id)};}
 
   function cultivationInfo(state){
     const index=state.player.realm,terminal=index>=REALMS.length-1,requirements=[],cost=index>=3?{stones:[180,300,450,700][index-3],core:[3,4,6,8][index-3],essence:[2,3,4,6][index-3]}:{};
@@ -213,7 +213,7 @@
   }
 
   function expand(state,legacy) {
-    state.version=4;state.mapId='main';state.worlds={};state.progress={visited:['main'],bosses:state.quests.bosses.slice(),gathered:{},claims:[]};
+    state.version=5;state.mapId='main';state.worlds={};state.progress={visited:['main'],bosses:state.quests.bosses.slice(),gathered:{},claims:[]};
     state.trials={};for(const m of Object.values(CONTENT.MAPS))if(m.type==='trial')state.trials[m.id]={wave:1,cleared:false,clears:0,rewarded:false};
     let n=(state.seed^0x9e3779b9)>>>0;n^=n<<13;n^=n>>>17;n^=n<<5;const pick=(n>>>0)%100;
     let grade='mortal',sum=0;for(const g of Object.values(CONTENT.ROOT_GRADES)){sum+=g.weight;if(pick<sum){grade=g.id;break;}}
@@ -244,9 +244,54 @@
     state.sect={joined:false,contribution:0,totalContribution:0,records:{bounty:0,defense:0,tower:0,tribulation:0},towerBest:0,tribulationBest:0,tribulationRanks:[],facilities:{},disciples:{}};
     for(const f of Object.values(CONTENT.SECT_FACILITIES))state.sect.facilities[f.id]={level:0,position:f.position,discipleId:null,progress:0,stored:0};
     for(const d of Object.values(CONTENT.SECT_DISCIPLES))state.sect.disciples[d.id]={recruited:false};
-    state.activity=null;state.exploration={claimed:[],records:{}};state.secondaryTechnique=null;state.player.secondaryCd=0;state.combo={element:null,until:0};state.legacyTechniqueIds=[];
+    state.activity=null;state.exploration={claimed:[],records:{}};state.secondaryTechnique=null;state.player.secondaryCd=0;state.combo={element:null,until:0};state.legacyTechniqueIds=[];state.dao={learned:[]};state.alchemy=null;
   }
   function sectReason(state){return state.dead?'先重聚灵身。':state.activity?'先结束当前历练。':state.mapId!=='sect'||!isSafe(state)?'请返回青云宗大院。':!state.sect.joined?'先加入青云宗。':'';}
+  function daoEffects(state){
+    const effects={swordDamage:1,swordRangeBonus:0,swordCooldown:1,swordLeech:0,swordLeechCap:0,bowDamage:1,bowSpeed:1,bowCooldown:1,bowPierce:0,comboWindow:6,comboRefund:6,spellMana:1,gatherYield:1};
+    for(const id of state.dao&&state.dao.learned||[]){const n=CONTENT.DAO_NODES[id];if(n)Object.assign(effects,n.effects);}return effects;
+  }
+  function daoMilestones(state){
+    const entries=[];for(let i=1;i<REALMS.length;i++)entries.push({id:'realm:'+i,label:`突破${REALMS[i].realmName}`,points:1,earned:state.player.realm>=i});
+    for(let i=3;i<=12;i+=3)entries.push({id:'explore:'+i,label:`探索 ${i} 处山野遗迹`,points:1,earned:state.exploration.claimed.length>=i});
+    for(const id of Object.keys(CONTENT.TRIAL_REWARDS))entries.push({id:'trial:'+id,label:CONTENT.MAPS[id].name+'首通',points:1,earned:state.trials[id].rewarded});
+    for(const id of ['bounty','defense','tower'])entries.push({id:'activity:'+id,label:CONTENT.ACTIVITIES[id].name+'首通',points:1,earned:state.sect.records[id]>0});
+    for(let i=1;i<=3;i++)entries.push({id:'tribulation:'+i,label:`通过第 ${i} 重雷劫`,points:1,earned:state.sect.tribulationRanks.includes(i)});return entries;
+  }
+  function daoInfo(state){
+    const learned=state.dao&&state.dao.learned||[],milestones=daoMilestones(state),earnedPoints=milestones.filter(m=>m.earned).reduce((n,m)=>n+m.points,0),spentPoints=learned.reduce((n,id)=>n+(CONTENT.DAO_NODES[id]?CONTENT.DAO_NODES[id].cost:0),0),availablePoints=earnedPoints-spentPoints;
+    const nodes=Object.values(CONTENT.DAO_NODES).map(n=>{const known=learned.includes(n.id),missing=n.prerequisites.find(id=>!learned.includes(id)),reason=state.dead?'先重聚灵身。':!isSafe(state)?'请在安全据点悟道。':known?'此悟道已参悟。':missing?'先参悟 '+CONTENT.DAO_NODES[missing].name+'。':state.player.realm<n.realmRequired?`需要${REALMS[n.realmRequired].realmName}境。`:availablePoints<n.cost?`需要 ${n.cost} 悟道点，当前余 ${availablePoints}。`:'';return{...n,learned:known,canLearn:!reason,reason};});
+    return{earnedPoints,spentPoints,availablePoints,milestones,directions:Object.values(CONTENT.DAO_DIRECTIONS),nodes,effects:daoEffects(state)};
+  }
+  function alchemyStation(state,stationMapId){
+    const id=stationMapId||state.mapId,map=CONTENT.MAPS[id],station=map&&map.npcs.find(n=>n.id==='alchemy'),near=!state.activity&&state.mapId===id&&!!station&&distance(station,state.player)<=105;
+    const reason=state.dead?'先重聚灵身。':!near?`请靠近${map?map.name:''}的丹炉。`:!isSafe(state)?'请在安全丹炉边炼制。':'';return{stationMapId:id,stationName:map?map.name+' · '+(station&&station.name||'丹炉'):'丹炉',near,reason};
+  }
+  function alchemyOutcome(recipeId,heat,seal){
+    const recipe=CONTENT.ALCHEMY_RECIPES[recipeId],bonus=seal==='slow'?heat==='balanced'?1:2:heat==='high'?-1:0;
+    const quality=bonus===2?{id:'refined',name:'养性丹成',description:'聚元完整，每种产物比原配方多 2 份。'}:bonus===1?{id:'concentrated',name:'凝元丹成',description:'灵气凝实，每种产物比原配方多 1 份。'}:bonus<0?{id:'scorched',name:'焦炼收炉',description:'武火快凝导致损耗，每种产物少 1 份，最低保留 1 份。'}:{id:'steady',name:'稳成收炉',description:'保持原配方的产量。'};
+    return{quality,output:Object.fromEntries(Object.entries(recipe.baseOutput).map(([id,n])=>[id,Math.max(1,n+bonus)]))};
+  }
+  function alchemyInfo(state){
+    const a=state.alchemy,station=alchemyStation(state,a&&a.stationMapId),active=!!a,recipe=a?CONTENT.ALCHEMY_RECIPES[a.recipeId]:null;
+    const recipes=Object.values(CONTENT.ALCHEMY_RECIPES).map(r=>{const reason=active?'先完成并领取当前这一炉。':station.reason||state.player.realm<r.realmRequired&&`需要${REALMS[r.realmRequired].realmName}境。`||!canPay(state,r.cost)&&'需要 '+costText(r.cost)+'。'||'';return{...r,available:!reason,reason};});
+    const heatChoices=Object.values(CONTENT.ALCHEMY_HEAT).map(c=>{const reason=station.reason||!a&&'先选择丹方开炉。'||a.phase!=='heat'&&'当前阶段不能再次选择炉火。'||!canPay(state,c.cost)&&'另需 '+costText(c.cost)+'。'||'';return{...c,available:!reason,reason};});
+    const sealChoices=Object.values(CONTENT.ALCHEMY_SEAL).map(c=>{const reason=station.reason||!a&&'先选择丹方开炉。'||a.phase!=='seal'&&'控火尚未完成，或已经开始凝丹。'||'';return{...c,available:!reason,reason};});
+    const claimReason=station.reason||!a&&'当前没有丹药可领。'||a.phase!=='ready'&&'这一炉尚未凝成丹药。'||'';
+    return{active,recipe,phase:a?a.phase:null,heat:a?a.heat:null,seal:a?a.seal:null,remaining:a?a.remaining:0,duration:a?a.duration:0,progress:a&&a.duration?clamp(1-a.remaining/a.duration,0,1):a&&a.phase==='ready'?1:0,output:a?a.output:null,quality:a?a.quality:null,...station,recipes,heatChoices,sealChoices,canClaim:!claimReason,claimReason};
+  }
+  function alchemyAction(state,id){
+    const parts=id.split(':'),kind=parts[1],key=parts[2],info=alchemyInfo(state),a=state.alchemy;
+    if(kind==='start'&&parts.length===3){const r=info.recipes.find(r=>r.id===key);if(!r||!r.available)return outcome(state,id,false,r&&r.reason||'未识此丹方。');pay(state,r.cost);state.alchemy={recipeId:key,stationMapId:state.mapId,phase:'heat',heat:null,seal:null,remaining:0,duration:0,output:null,quality:null,startedAt:state.time,paidCost:{...r.cost}};return outcome(state,id,true,`${r.name}已开炉，材料投入丹炉。请选择控火方式。`);}
+    if(kind==='heat'&&parts.length===3){const c=info.heatChoices.find(c=>c.id===key);if(!c||!c.available)return outcome(state,id,false,c&&c.reason||'未知炉火。');pay(state,c.cost);for(const[k,n]of Object.entries(c.cost))a.paidCost[k]=(a.paidCost[k]||0)+n;a.heat=key;a.phase='heating';a.duration=c.duration;a.remaining=c.duration;return outcome(state,id,true,`${c.label}开始，历练时间 ${c.duration} 秒后可选择凝丹。`);}
+    if(kind==='seal'&&parts.length===3){const c=info.sealChoices.find(c=>c.id===key);if(!c||!c.available)return outcome(state,id,false,c&&c.reason||'未知凝丹方式。');a.seal=key;a.phase='sealing';a.duration=c.duration;a.remaining=c.duration;return outcome(state,id,true,`${c.label}开始，${c.duration} 秒后可领取丹药。`);}
+    if(kind==='claim'&&parts.length===2){if(!info.canClaim)return outcome(state,id,false,info.claimReason);grant(state,a.output);const message=`${a.quality.name}，获得 ${costText(a.output)}。`;state.alchemy=null;effect(state,'particle',state.player.x,state.player.y-20,.8,18,{color:'#e0c98d'});return outcome(state,id,true,message);}
+    return outcome(state,id,false,'未知炼丹操作。');
+  }
+  function alchemyStep(state,dt){
+    const a=state.alchemy;if(!a||state.dead||!['heating','sealing'].includes(a.phase))return;a.remaining=Math.max(0,a.remaining-dt);if(a.remaining>1e-9)return;
+    a.remaining=0;a.duration=0;if(a.phase==='heating'){a.phase='seal';log(state,'炉火调和完毕，可回原丹炉选择凝丹方式。');}else{a.phase='ready';const result=alchemyOutcome(a.recipeId,a.heat,a.seal);a.output=result.output;a.quality=result.quality;log(state,`${a.quality.name}，丹药已成。请回${CONTENT.MAPS[a.stationMapId].name}丹炉领取。`);}
+  }
   function facilityInfo(state,id){
     const f=CONTENT.SECT_FACILITIES[id],v=state.sect.facilities[id],pos=CONTENT.SECT_POSITIONS[v.position],d=CONTENT.SECT_DISCIPLES[v.discipleId];
     const productionMultiplier=(pos.element===f.preferredElement?1.25:1)*(d?(d.element===pos.element?1.25:GENERATES[d.element]===pos.element?1.15:1):1);
@@ -320,6 +365,8 @@
   }
   function systemsAction(state,id){
     const parts=id.split(':'),[kind,key,arg,last]=parts;
+    if(kind==='dao'){const info=daoInfo(state).nodes.find(n=>n.id===arg);if(parts.length!==3||key!=='learn'||!info||!info.canLearn)return outcome(state,id,false,info&&info.reason||'未知悟道节点。');state.dao.learned.push(arg);return outcome(state,id,true,`${info.name}已参悟，消耗 ${info.cost} 悟道点。`);}
+    if(kind==='alchemy')return alchemyAction(state,id);
     if(kind==='activity'){
       if(key==='leave'&&parts.length===2)return leaveActivity(state);
       const a=state.activity;if(!a||a.phase!=='choice'||key!=='blessing'||parts.length!==3||!['blade','vital','spirit'].includes(arg))return outcome(state,id,false,'当前不能选择此祝福。');
@@ -426,7 +473,7 @@
       if(!reason&&!canPay(state,service.cost))reason='需要 '+costText(service.cost)+'。';
       return{...service,remaining,available:!reason,reason};
     });
-    const guidance=id==='master'?{path:objective(state),sect:state.sect.joined?'宗门任务随筑基、金丹、元婴、化神陆续开启。生产设施需弟子驻守，成果容量三批，记得主动领取。':'可从传送阵前往青云宗加入山门，试用灵弓与法杖。'}:id==='elder'?{technique:`${techniqueInfo(state).name}为固定${techniqueInfo(state).gradeName}，当前${techniqueInfo(state).level}重；研习只提升重数，高阶经卷在宗门藏经换取。`,fit:`当前兵器${weaponInfo(state).name}，${techniqueInfo(state).weaponCompatible?'与主法相契，威力提高15%。':'主法仍可正常施展。'}筑基后选不同副法，木火土金水木相生在6秒内连施可提高后一法威力并返灵。`}:{};
+    const guidance=id==='master'?{path:objective(state),sect:state.sect.joined?'宗门任务随筑基、金丹、元婴、化神陆续开启。生产设施需弟子驻守，成果容量三批，记得主动领取。':'可从传送阵前往青云宗加入山门，试用灵弓与法杖。'}:id==='elder'?{technique:`${techniqueInfo(state).name}为固定${techniqueInfo(state).gradeName}，当前${techniqueInfo(state).level}重；研习只提升重数，高阶经卷在宗门藏经换取。`,fit:`当前兵器${weaponInfo(state).name}，${techniqueInfo(state).weaponCompatible?'与主法相契，威力提高15%。':'主法仍可正常施展。'}筑基后选不同副法，木火土金水木相生在${techniqueInfo(state).comboWindow}秒内连施可提高后一法威力，并返${techniqueInfo(state).comboRefund}灵力。`}:{};
     const consults=Object.entries(guidance).map(([key,description])=>({id:key,label:{path:'请教下一步道途',sect:'请教宗门历练',technique:'请教功法传承',fit:'请教兵器与五行搭配'}[key],description,available:!vicinity,reason:vicinity}));
     return{...n,...(location||{}),dialogue:guidance.path?`“${guidance.path}。宗门另有护脉、镇塔与渡劫历练，修行不会在天门结束。”`:n.dialogue,met:p.met,choice:p.choice,rapport:p.rapport,near,choices,commission,services,consults};
   }
@@ -629,14 +676,16 @@
     const p = state.player, s = stats(state),weapon=weaponInfo(state);
     if (p.attackCd > 0 || state.dead || p.dashTime > 0) return;
     p.attackCd = weapon.cooldown;
-    if(weapon.kind!=='sword'){const info={element:weapon.kind==='bow'?'wind':CONTENT.ITEMS[weapon.itemId].element||'thunder',color:weapon.color};playerBolt(state,p.facing,weapon.projectileSpeed,s.attack*weapon.damageMultiplier,info,{life:weapon.range/weapon.projectileSpeed,radius:weapon.kind==='bow'?5:10,kind:weapon.kind==='bow'?'arrow':'orb',weaponKind:weapon.kind,angle:p.facing,...(weapon.kind==='staff'?{explosion:65}:{})});effect(state,weapon.kind==='bow'?'bowShot':'orbCast',p.x,p.y,.22,20,{angle:p.facing,color:weapon.color});return;}
-    effect(state, 'slash', p.x, p.y, 0.22, 112, { angle: p.facing, color: '#e9e2b5' });
+    if(weapon.kind!=='sword'){const info={element:weapon.kind==='bow'?'wind':CONTENT.ITEMS[weapon.itemId].element||'thunder',color:weapon.color};playerBolt(state,p.facing,weapon.projectileSpeed,s.attack*weapon.damageMultiplier,info,{life:weapon.range/weapon.projectileSpeed,radius:weapon.kind==='bow'?5:10,kind:weapon.kind==='bow'?'arrow':'orb',weaponKind:weapon.kind,angle:p.facing,...(weapon.kind==='staff'?{explosion:65}:weapon.pierce?{pierce:weapon.pierce,hits:[]}:{})});effect(state,weapon.kind==='bow'?'bowShot':'orbCast',p.x,p.y,.22,20,{angle:p.facing,color:weapon.color});return;}
+    effect(state, 'slash', p.x, p.y, 0.22, weapon.range+4, { angle: p.facing, color: '#e9e2b5' });
+    let inflicted=0;
     for (const e of state.enemies) {
-      if (e.hp <= 0 || e.gated || distance(e, p) > 108 + e.radius) continue;
+      if (e.hp <= 0 || e.gated || distance(e, p) > weapon.range + e.radius) continue;
       let diff = Math.atan2(e.y - p.y, e.x - p.x) - p.facing;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      if (Math.abs(diff) < 1.15 || distance(e, p) < e.radius + 26) hurtEnemy(state, e, s.attack, 9);
+      if (Math.abs(diff) < 1.15 || distance(e, p) < e.radius + 26){const before=e.hp;hurtEnemy(state,e,s.attack*weapon.damageMultiplier,9);inflicted+=Math.max(0,before-e.hp);}
     }
+    if(weapon.leech&&inflicted>0){const heal=Math.min(s.maxHp*weapon.leechCap,inflicted*weapon.leech);p.hp=Math.min(s.maxHp,p.hp+heal);effect(state,'heal',p.x,p.y,.35,30,{color:'#d0dfb4'});}
   }
 
   function statusEnemy(e,type,life,damage){
@@ -654,8 +703,8 @@
     const attack=stats(state).attack*info.multiplier*info.comboMultiplier,baseId=info.baseId||info.id,profile=info.castProfile||{},range=info.rangeMultiplier||1;
     if(p.mp<info.manaCost){outcome(state,'skill',false,'灵力不足。服用回春丹或返回驿站调息。');return;}
     p.mp-=info.manaCost;p[cd]=info.cooldown;
-    if(info.comboReady){p.mp=Math.min(stats(state).maxMp,p.mp+6);effect(state,'particle',p.x,p.y-28,.8,18,{color:info.color});log(state,'五行相生：后一法威力提高25%，返还6灵力。');}
-    state.combo={element:info.comboElement,until:info.comboElement?state.time+6:0};
+    if(info.comboReady){p.mp=Math.min(stats(state).maxMp,p.mp+info.comboRefund);effect(state,'particle',p.x,p.y-28,.8,18,{color:info.color});log(state,`五行相生：后一法威力提高25%，返还${info.comboRefund}灵力。`);}
+    state.combo={element:info.comboElement,until:info.comboElement?state.time+info.comboWindow:0};
     const extra={element:info.element,color:info.color};
     if(baseId==='arrow'){
       const count=profile.projectileCount||5,spread=profile.spread||.14;for(let i=0;i<count;i++){const offset=(i-(count-1)/2)*spread;playerBolt(state,p.facing+offset,670,attack*1.65,info,{life:1.25*range,radius:6,kind:'arrow',weaponKind:'bow',angle:p.facing+offset,...(i===Math.floor(count/2)?{pierce:3,hits:[]}:{})});}effect(state,'bowVolley',p.x,p.y,.4,22,{...extra,angle:p.facing});
@@ -836,17 +885,18 @@
     if(chosen.kind==='npc'){state.interaction=chosen.entry.interaction||chosen.entry.id;return outcome(state,'interact',true,'');}
     if(chosen.kind==='site'){state.interaction='site:'+chosen.entry.id;return outcome(state,'interact',true,'');}
     const node=chosen.entry;
+    const yieldMultiplier=daoEffects(state).gatherYield;
     node.ready = node.type === 'herb' ? 75 : node.type==='crystal'?95:120;
     if (node.type === 'herb') {
-      p.herbs += 2; gainXp(state,6); state.quests.herbs += 2;state.progress.gathered.herbs=(state.progress.gathered.herbs||0)+2;
+      const amount=Math.ceil(2*yieldMultiplier);p.herbs += amount; gainXp(state,6); state.quests.herbs += amount;state.progress.gathered.herbs=(state.progress.gathered.herbs||0)+amount;
       effect(state, 'heal', node.x, node.y, 0.55, 35, { color: '#a2dfb7' });
-      outcome(state, 'interact', true, '采得 2 株灵草，获得 6 修为。');
+      outcome(state, 'interact', true, `采得 ${amount} 株灵草，获得 6 修为。`);
     } else if(node.type==='crystal') {
-      p.stones += 12; gainXp(state,5);state.progress.gathered.stones=(state.progress.gathered.stones||0)+12;
+      const amount=Math.ceil(12*yieldMultiplier);p.stones += amount; gainXp(state,5);state.progress.gathered.stones=(state.progress.gathered.stones||0)+amount;
       effect(state, 'burst', node.x, node.y, 0.55, 38, { color: '#9fdedc' });
-      outcome(state, 'interact', true, '采得 12 灵石，获得 5 修为。');
+      outcome(state, 'interact', true, `采得 ${amount} 灵石，获得 5 修为。`);
     } else {
-      const r=CONTENT.RESOURCES[node.type],amount=['core','essence'].includes(node.type)?1:2;
+      const r=CONTENT.RESOURCES[node.type],amount=['core','essence'].includes(node.type)?1:Math.ceil(2*yieldMultiplier);
       p[node.type]+=amount;state.progress.gathered[node.type]=(state.progress.gathered[node.type]||0)+amount;gainXp(state,6);
       effect(state,'burst',node.x,node.y,.55,38,{color:r.color});outcome(state,'interact',true,`采得 ${amount} ${r.name}，获得 6 修为。`);
     }
@@ -920,6 +970,7 @@
     p.shieldTime=Math.max(0,p.shieldTime-dt);if(p.shieldTime<=0)p.shield=0;p.slow=Math.max(0,p.slow-dt);
     ['attackCd', 'skillCd', 'secondaryCd', 'dashCd', 'invuln', 'hit'].forEach(key => { p[key] = Math.max(0, p[key] - dt); });
     productionStep(state,dt);
+    alchemyStep(state,dt);
     state.nodes.forEach(n => { n.ready = Math.max(0, n.ready - dt); });
     if (!state.dead) {
       if (finite(input.aimX) && finite(input.aimY) && Math.hypot(input.aimX - p.x, input.aimY - p.y) > 4) p.facing = Math.atan2(input.aimY - p.y, input.aimX - p.x);
@@ -1000,7 +1051,7 @@
 
   function serialize(state) {
     if(state.activity)state.activity.world={enemies:state.enemies,nodes:state.nodes,drops:state.drops};else state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};
-    const keys=['version','seed','rng','time','player','mapId','worlds','root','techniques','techniqueGrades','npcProgress','activeTechnique','secondaryTechnique','legacyTechniqueIds','combo','sect','activity','exploration','inventory','equipment','buffs','story','progress','trials','projectiles','logs','quests','questRewards','won','dead','meditationCd'];
+    const keys=['version','seed','rng','time','player','mapId','worlds','root','techniques','techniqueGrades','npcProgress','activeTechnique','secondaryTechnique','legacyTechniqueIds','combo','sect','activity','exploration','dao','alchemy','inventory','equipment','buffs','story','progress','trials','projectiles','logs','quests','questRewards','won','dead','meditationCd'];
     const data={};for(const key of keys)data[key]=state[key];return JSON.stringify(data);
   }
 
@@ -1085,7 +1136,7 @@
   function deserialize(json){
     const fail=()=>{throw new Error('存档无效或不兼容，请选择有效的山海问剑存档。');};
     if(typeof json!=='string'||json.length>1500000)fail();let d;try{d=JSON.parse(json);}catch(_){fail();}
-    if(!d||typeof d!=='object')fail();if(d.version===1)return expand(deserializeV1(json),true);if(![2,3,4].includes(d.version))fail();
+    if(!d||typeof d!=='object')fail();if(d.version===1)return expand(deserializeV1(json),true);if(![2,3,4,5].includes(d.version))fail();
     const num=(v,lo,hi,integer=false)=>{if(!finite(v)||v<lo||v>hi||integer&&!Number.isInteger(v))fail();return v;};
     const bool=v=>{if(typeof v!=='boolean')fail();return v;};
     const object=v=>{if(!v||typeof v!=='object'||Array.isArray(v))fail();return v;};
@@ -1096,14 +1147,14 @@
     if(!s.root.elements.length||s.root.legacy&&(s.root.grade!=='mortal'||s.root.elements.length!==1||s.root.elements[0]!=='metal'))fail();
     s.techniques={};for(const [id,level]of Object.entries(object(d.techniques))){if(!CONTENT.TECHNIQUES[id])fail();s.techniques[id]=num(level,1,3,true);}if(!s.techniques.sword||!s.techniques[d.activeTechnique])fail();s.activeTechnique=d.activeTechnique;
     s.techniqueGrades={};if(d.version===2){for(const id of Object.keys(s.techniques))s.techniqueGrades[id]=0;}
-    else{const grades=object(d.techniqueGrades);if(Object.keys(grades).length!==Object.keys(s.techniques).length)fail();for(const [id,index]of Object.entries(grades)){if(!s.techniques[id])fail();s.techniqueGrades[id]=num(index,0,4,true);if(d.version===4&&index!==CONTENT.TECHNIQUES[id].gradeIndex)fail();}}
+    else{const grades=object(d.techniqueGrades);if(Object.keys(grades).length!==Object.keys(s.techniques).length)fail();for(const [id,index]of Object.entries(grades)){if(!s.techniques[id])fail();s.techniqueGrades[id]=num(index,0,4,true);if(d.version>=4&&index!==CONTENT.TECHNIQUES[id].gradeIndex)fail();}}
     if(d.version<4){for(const [id,index]of Object.entries({...s.techniqueGrades})){if(index){const grade=Object.values(CONTENT.TECHNIQUE_GRADES).find(g=>g.index===index),variant=id+'_'+grade.id;if(!CONTENT.TECHNIQUES[variant])fail();s.techniques[variant]=s.techniques[id];s.techniqueGrades[variant]=index;s.legacyTechniqueIds.push(variant);s.techniqueGrades[id]=0;if(s.activeTechnique===id)s.activeTechnique=variant;}}}
-    else{s.legacyTechniqueIds=ids(d.legacyTechniqueIds,Object.keys(CONTENT.TECHNIQUES));for(const id of s.legacyTechniqueIds)if(!s.techniques[id]||!CONTENT.TECHNIQUES[id].gradeIndex)fail();s.secondaryTechnique=d.secondaryTechnique;if(s.secondaryTechnique!==null&&(!s.techniques[s.secondaryTechnique]||s.secondaryTechnique===s.activeTechnique))fail();const combo=object(d.combo);if(combo.element!==null&&!Object.keys(GENERATES).includes(combo.element))fail();s.combo={element:combo.element,until:num(combo.until,0,s.time+6)};if(!s.combo.element&&s.combo.until!==0)fail();}
+    else{s.legacyTechniqueIds=ids(d.legacyTechniqueIds,Object.keys(CONTENT.TECHNIQUES));for(const id of s.legacyTechniqueIds)if(!s.techniques[id]||!CONTENT.TECHNIQUES[id].gradeIndex)fail();s.secondaryTechnique=d.secondaryTechnique;if(s.secondaryTechnique!==null&&(!s.techniques[s.secondaryTechnique]||s.secondaryTechnique===s.activeTechnique))fail();const combo=object(d.combo);if(combo.element!==null&&!Object.keys(GENERATES).includes(combo.element))fail();s.combo={element:combo.element,until:num(combo.until,0,s.time+(d.version>=5?8:6))};if(!s.combo.element&&s.combo.until!==0)fail();}
     s.inventory={};for(const [id,count]of Object.entries(object(d.inventory))){const item=CONTENT.ITEMS[id];if(!item||item.resourceField)fail();s.inventory[id]=num(count,0,1e7,true);}if(!s.inventory.starterSword||!s.inventory.clothRobe)fail();
     const eq=object(d.equipment);s.equipment={};for(const slot of ['weapon','robe','charm']){const id=eq[slot];if(id===null){if(slot!=='charm')fail();s.equipment[slot]=null;}else{const item=CONTENT.ITEMS[id];if(!item||item.slot!==slot||!s.inventory[id])fail();s.equipment[slot]=id;}}
     if(!Array.isArray(d.buffs)||d.buffs.length>3)fail();s.buffs=d.buffs.map(b=>{if(!b||!['rage','ward','insight'].includes(b.type))fail();return{type:b.type,life:num(b.life,0,{rage:40,ward:45,insight:60}[b.type])};});if(new Set(s.buffs.map(b=>b.type)).size!==s.buffs.length)fail();
     const p=object(d.player);s.player.realm=num(p.realm,0,d.version<4?3:7,true);s.player.weapon=num(p.weapon,0,6,true);if(s.player.weapon>Math.min(6,2+s.player.realm*2))fail();
-    if(d.version===4)s.player.secondaryCd=num(p.secondaryCd,0,20);if(s.secondaryTechnique&&s.player.realm<1)fail();
+    if(d.version>=4)s.player.secondaryCd=num(p.secondaryCd,0,20);if(s.secondaryTechnique&&s.player.realm<1)fail();
     if(Object.values(s.techniques).includes(3)&&s.player.realm<1)fail();if(s.player.realm<CONTENT.MAPS[s.mapId].realmRequired)fail();
     const st=stats(s);s.player.x=num(p.x,43,WIDTH-43);s.player.y=num(p.y,43,HEIGHT-43);if(blocked(p.x,p.y,17,s))fail();
     s.player.hp=num(p.hp,0,st.maxHp);s.player.mp=num(p.mp,0,st.maxMp);
@@ -1122,7 +1173,7 @@
     for(const [id,count]of Object.entries(object(progress.gathered))){if(!CONTENT.RESOURCES[id])fail();s.progress.gathered[id]=num(count,0,1e8,true);}
     const trials=object(d.trials);s.trials={};for(const id of Object.keys(CONTENT.TRIAL_REWARDS)){const t=object(trials[id]);s.trials[id]={wave:num(t.wave,1,3,true),cleared:bool(t.cleared),clears:num(t.clears,0,1e7,true),rewarded:bool(t.rewarded)};if(t.rewarded!==(t.clears>0)||t.cleared&&(t.wave!==3||t.clears<1))fail();const boss=CONTENT.MAPS[id].spawns.find(v=>v[3]===3)[0];if(t.rewarded&&(!s.progress.visited.includes(id)||!s.progress.bosses.includes(boss)))fail();}
     for(const [id,index]of Object.entries(s.techniqueGrades)){const t=CONTENT.TECHNIQUES[id],legacy=s.legacyTechniqueIds.includes(id);if(legacy){if(s.techniques[id]<[1,1,2,3,3][index]||s.player.realm<Math.min(3,index-1)||Object.values(CONTENT.TECHNIQUE_GRADES).filter(g=>g.index<=index).some(g=>g.trialsRequired.some(map=>!s.trials[map].rewarded)))fail();}else if(s.player.realm<t.requiredRealm||(t.requiredTrials||[]).some(map=>!s.trials[map].rewarded))fail();}
-    if(d.version===4){
+    if(d.version>=4){
       const sect=object(d.sect);s.sect.joined=bool(sect.joined);s.sect.contribution=num(sect.contribution,0,1e8,true);s.sect.totalContribution=num(sect.totalContribution,s.sect.contribution,1e8,true);s.sect.towerBest=num(sect.towerBest,0,5,true);s.sect.tribulationBest=num(sect.tribulationBest,0,3,true);s.sect.tribulationRanks=ids(sect.tribulationRanks,[1,2,3]);if(s.sect.tribulationBest!==Math.max(0,...s.sect.tribulationRanks))fail();
       const records=object(sect.records);if(Object.keys(records).length!==4)fail();for(const id of Object.keys(CONTENT.ACTIVITIES))s.sect.records[id]=num(records[id],0,1e7,true);
       if(s.sect.records.tower>0&&s.sect.towerBest!==5||s.sect.records.tribulation<s.sect.tribulationRanks.length||s.sect.towerBest&&s.player.realm<3||s.sect.tribulationBest&&s.player.realm<s.sect.tribulationBest+3)fail();
@@ -1132,6 +1183,20 @@
       for(const id of Object.keys(CONTENT.SECT_DISCIPLES)){const v=object(disciples[id]);s.sect.disciples[id]={recruited:bool(v.recruited)};if(v.recruited&&(!s.sect.joined||s.player.realm<CONTENT.SECT_DISCIPLES[id].realmRequired))fail();}if(s.sect.joined&&!s.sect.disciples.qinghe.recruited)fail();
       const assigned=[];for(const id of Object.keys(CONTENT.SECT_FACILITIES)){const v=object(facilities[id]);if(!CONTENT.SECT_POSITIONS[v.position])fail();const level=num(v.level,0,3,true),stored=num(v.stored,0,3,true),progress=num(v.progress,0,CONTENT.SECT_FACILITIES[id].duration),discipleId=v.discipleId;if(discipleId!==null&&(!s.sect.disciples[discipleId]||!s.sect.disciples[discipleId].recruited||assigned.includes(discipleId)))fail();if(discipleId)assigned.push(discipleId);if(level>s.player.realm||!level&&(stored||progress||discipleId)||stored===3&&progress!==0||!discipleId&&progress!==0)fail();s.sect.facilities[id]={level,stored,progress,position:v.position,discipleId};}
       const exploration=object(d.exploration);s.exploration.claimed=ids(exploration.claimed,Object.keys(CONTENT.EXPLORATION_SITES));const evidence=object(exploration.records);if(Object.keys(evidence).length!==s.exploration.claimed.length)fail();s.exploration.records={};for(const id of s.exploration.claimed){const site=CONTENT.EXPLORATION_SITES[id],r=object(evidence[id]);if(r.mapId!==site.mapId||!s.progress.visited.includes(site.mapId)||s.player.realm<site.realmRequired)fail();s.exploration.records[id]={mapId:r.mapId,time:num(r.time,0,s.time)};}
+    }
+    if(d.version>=5){
+      s.dao={learned:ids(object(d.dao).learned,Object.keys(CONTENT.DAO_NODES))};
+      s.dao.learned.forEach((id,i)=>{const n=CONTENT.DAO_NODES[id];if(s.player.realm<n.realmRequired||n.prerequisites.some(p=>!s.dao.learned.slice(0,i).includes(p)))fail();});if(daoInfo(s).availablePoints<0||s.combo.until>s.time+daoEffects(s).comboWindow)fail();
+      if(d.alchemy!==null){
+        const a=object(d.alchemy),recipe=CONTENT.ALCHEMY_RECIPES[a.recipeId],station=CONTENT.MAPS[a.stationMapId];if(!recipe||!station||!station.npcs.some(n=>n.id==='alchemy')||!s.progress.visited.includes(a.stationMapId)||s.player.realm<recipe.realmRequired||!['heat','heating','seal','sealing','ready'].includes(a.phase))fail();
+        const heat=a.heat,seal=a.seal,heating=CONTENT.ALCHEMY_HEAT[heat],sealing=CONTENT.ALCHEMY_SEAL[seal];
+        if(a.phase==='heat'&&(heat!==null||seal!==null)||a.phase!=='heat'&&!heating||['heating','seal'].includes(a.phase)&&seal!==null||['sealing','ready'].includes(a.phase)&&!sealing)fail();
+        const expectedDuration=a.phase==='heating'?heating.duration:a.phase==='sealing'?sealing.duration:0,duration=num(a.duration,expectedDuration,expectedDuration),remaining=num(a.remaining,['heating','sealing'].includes(a.phase)?Number.MIN_VALUE:0,duration),startedAt=num(a.startedAt,0,s.time);
+        const minimumTime=a.phase==='heating'?heating.duration-remaining:a.phase==='seal'?heating.duration:a.phase==='sealing'?heating.duration+sealing.duration-remaining:a.phase==='ready'?heating.duration+sealing.duration:0;if(s.time-startedAt+1e-6<minimumTime)fail();
+        const expectedCost={...recipe.cost};if(heat==='high')for(const[k,n]of Object.entries(CONTENT.ALCHEMY_HEAT.high.cost))expectedCost[k]=(expectedCost[k]||0)+n;const paid=object(a.paidCost);if(Object.keys(paid).length!==Object.keys(expectedCost).length||Object.keys(expectedCost).some(k=>paid[k]!==expectedCost[k]))fail();
+        let output=null,quality=null;if(a.phase==='ready'){const result=alchemyOutcome(a.recipeId,heat,seal),savedOutput=object(a.output),savedQuality=object(a.quality);if(Object.keys(savedOutput).length!==Object.keys(result.output).length||Object.keys(result.output).some(k=>savedOutput[k]!==result.output[k])||Object.keys(savedQuality).length!==3||Object.keys(result.quality).some(k=>savedQuality[k]!==result.quality[k]))fail();output=result.output;quality=result.quality;}else if(a.output!==null||a.quality!==null)fail();
+        s.alchemy={recipeId:a.recipeId,stationMapId:a.stationMapId,phase:a.phase,heat,seal,remaining,duration,output,quality,startedAt,paidCost:expectedCost};
+      }
     }
     const story=object(d.story);s.story.chapter=num(story.chapter,0,CONTENT.STORY.length,true);s.story.completed=ids(story.completed,CONTENT.STORY.map(c=>c.id));if(s.story.completed.length!==s.story.chapter||s.story.completed.some((id,i)=>id!==CONTENT.STORY[i].id))fail();
     s.story.choices={};s.story.relations={mercy:0,wisdom:0,valor:0};if(Object.keys(object(story.choices)).length!==s.story.chapter)fail();
@@ -1147,7 +1212,7 @@
       saved.nodes.forEach((v,i)=>{if(!v||v.id!==world.nodes[i].id||v.type!==world.nodes[i].type)fail();world.nodes[i].ready=num(v.ready,0,120);});world.drops=loadDrops(saved.drops);s.worlds[mapId]=world;
     }
     const current=s.worlds[s.mapId];s.enemies=current.enemies;s.nodes=current.nodes;s.drops=current.drops;
-    if(d.version===4&&d.activity!==null){
+    if(d.version>=4&&d.activity!==null){
       const v=object(d.activity),catalog=CONTENT.ACTIVITIES[v.type];if(!catalog||!s.sect.joined||s.mapId!=='sect'||v.mapId!==catalog.mapId)fail();
       const realm=num(v.realm,catalog.realmRequired,s.player.realm,true),rank=num(v.rank,1,3,true),stage=num(v.stage,1,v.type==='tower'?5:v.type==='defense'?3:1,true);if(rank!==(v.type==='tribulation'?clamp(realm-3,1,3):1)||!['fight','choice','complete','failed'].includes(v.phase)||v.phase==='choice'&&(v.type!=='tower'||stage>=5))fail();
       const duration=num(v.duration,30+rank*10,30+rank*10),elapsed=num(v.elapsed,0,duration+.05),nextStrike=num(v.nextStrike,-.05,2),blessings=object(v.blessings),rewarded=bool(v.rewarded);if(rewarded!==(v.phase==='complete'))fail();
@@ -1185,6 +1250,6 @@
   }
 
   return { createGame, step, interact, action, serialize, deserialize, stats, objective, zoneAt,
-    mapInfo,isSafe,rootInfo,techniqueInfo,storyInfo,questsInfo,inventoryInfo,npcInfo,cultivationInfo,weaponInfo,sectInfo,activityInfo,siteInfo,CONTENT,
+    mapInfo,isSafe,rootInfo,techniqueInfo,storyInfo,questsInfo,inventoryInfo,npcInfo,cultivationInfo,weaponInfo,sectInfo,activityInfo,siteInfo,daoInfo,alchemyInfo,CONTENT,
     WIDTH, HEIGHT, HUB, PONDS, OBSTACLES, REALMS, NPCS, ENEMY };
 });

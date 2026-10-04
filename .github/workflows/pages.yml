@@ -33,7 +33,7 @@ jobs:
         run: |
           mkdir -p _site/assets
           cp index.html style.css content.js engine.js renderer.js app.js .nojekyll _site/
-          cp assets/favicon.svg assets/cover.png assets/pine.png assets/cultivator.png assets/sect-hall.png assets/cultivator-bow.png assets/cultivator-staff.png _site/assets/
+          cp assets/favicon.svg assets/cover.png assets/pine.png assets/cultivator.png assets/sect-hall.png assets/cultivator-bow.png assets/cultivator-staff.png assets/terrain-grass-v4.png assets/terrain-ash-v4.png assets/terrain-snow-v4.png assets/terrain-stone-v4.png assets/pavilion-v4.png assets/alchemy-lodge-v4.png assets/forge-v4.png assets/bamboo-v4.png assets/rock-v4.png assets/wolf-v4.png assets/golem-v4.png assets/spirit-v4.png assets/guardian-v4.png assets/dragon-v4.png assets/ancient-tree-v4.png assets/elder-v4.png assets/herbalist-v4.png assets/player-sword-v4.png assets/player-bow-v4.png assets/player-staff-v4.png assets/dead-tree-v4.png assets/spirit-gate-v4.png assets/jade-shrine-v4.png assets/herb-garden-v4.png assets/terrain-lava-v4.png assets/terrain-water-v4.png assets/stone-pillar-v4.png assets/ice-spire-v4.png _site/assets/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

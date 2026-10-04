@@ -16,7 +16,7 @@ const permanentWorlds=worlds=>Object.fromEntries(Object.entries(worlds).map(([id
 
 test('authentic v3 migration preserves the earned NPC, immortal technique, gear and every permanent world',()=>{
   assert.equal(crypto.createHash('sha256').update(V3).digest('hex'),'a7707f367a3a2eff03bc1d240ecd0f5eb4ab4d7ff1b23ddb82534a78851576ab');
-  const old=JSON.parse(V3),s=X.deserialize(V3),next=JSON.parse(X.serialize(s));assert.equal(s.version,4);
+  const old=JSON.parse(V3),s=X.deserialize(V3),next=JSON.parse(X.serialize(s));assert.equal(s.version,5);
   for(const k of ['root','npcProgress','inventory','equipment','buffs','story','progress','trials','projectiles','quests','questRewards','won','dead','meditationCd','seed','rng','time'])assert.deepEqual(next[k],old[k],k);
   for(const k of Object.keys(old.player))assert.deepEqual(next.player[k],old.player[k],k);
   for(const [id,level]of Object.entries(old.techniques)){const grade=old.techniqueGrades[id],suffix=['','_mystic','_earth','_heaven','_immortal'][grade],mapped=id+suffix;assert.equal(next.techniques[mapped],level);assert.equal(X.techniqueInfo(s,mapped).gradeIndex,grade);}
