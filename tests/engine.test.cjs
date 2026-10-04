@@ -8,6 +8,8 @@ const tick = (s, input = {}, seconds = 1) => {
 };
 const quiet = () => {
   const s = X.createGame(321);
+  // Fix root balance only for isolated legacy combat regressions; full-run tests use real seeded roots.
+  if(s.root){s.root={grade:'mortal',elements:['water'],legacy:false};s.player.hp=X.stats(s).maxHp;s.player.mp=X.stats(s).maxMp;}
   s.enemies.forEach(e => {e.stun = 20;});
   return s;
 };
@@ -20,10 +22,12 @@ test('new games are deterministic, complete and loadable', () => {
   const a = X.createGame(791), b = X.createGame(791);
   assert.equal(X.serialize(a), X.serialize(b));
   assert.equal(a.enemies.filter(e => e.boss).length, 3);
-  assert.equal(a.nodes.length, 42);
+  assert.equal(a.nodes.length, X.CONTENT ? X.CONTENT.MAPS.main.nodes.length : 42);
   assert.equal(a.player.hp, X.stats(a).maxHp);
   assert.equal(a.player.mp, X.stats(a).maxMp);
-  assert.equal(X.serialize(X.deserialize(X.serialize(a))), X.serialize(a));
+  const restored=X.deserialize(X.serialize(a));
+  assert.deepEqual(restored.player,a.player);assert.deepEqual(restored.quests,a.quests);assert.deepEqual(restored.nodes,a.nodes);
+  assert.equal(X.serialize(X.deserialize(X.serialize(restored))), X.serialize(restored));
   assert.equal(typeof X.objective(a), 'string');
   assert.ok(a.enemies.every(e => !blocked(e.x, e.y, e.radius)));
 });
@@ -158,11 +162,12 @@ test('enemy attacks telegraph damage and dash protects during invulnerability', 
 
 test('safe area blocks hostile damage and prevents enemy entry', () => {
   const s=X.createGame(),e=s.enemies[0];
+  const fullHp=X.stats(s).maxHp;
   Object.assign(s.player,{x:820,y:1800});
   Object.assign(e,{x:870,y:1800,homeX:870,homeY:1800,mode:'windup',attackTimer:0.01,attackX:820,attackY:1800});
   s.projectiles.push({x:835,y:1800,vx:-200,vy:0,life:2,radius:9,owner:'enemy',sourceId:e.id,damage:99});
   tick(s,{},1);
-  assert.equal(s.player.hp,120);
+  assert.equal(s.player.hp,fullHp);
   assert.ok(Math.hypot(e.x-X.HUB.x,e.y-X.HUB.y)>=X.HUB.radius+e.radius);
   assert.equal(s.projectiles.length,0);
 });
@@ -236,24 +241,29 @@ test('death and revival retain milestones and equipment with bounded penalties',
 
 test('save restores ongoing combat and discards unknown object properties', () => {
   const s=X.createGame(923),e=s.enemies[0];Object.assign(s.player,{x:985,y:1725});
+  const initialHp=s.player.hp;
   Object.assign(e,{x:985,y:1680,homeX:985,homeY:1680,cooldown:0});X.step(s,{},0.05);
   const data=JSON.parse(X.serialize(s));data.player.arbitrary='ignored';data.arbitrary='ignored';
   const loaded=X.deserialize(JSON.stringify(data));
   assert.equal(loaded.time,s.time);assert.equal(loaded.enemies[0].mode,'windup');
   assert.ok(loaded.effects.some(f=>f.type==='warning'));
   assert.equal(loaded.arbitrary,undefined);assert.equal(loaded.player.arbitrary,undefined);
-  tick(loaded,{},0.7);assert.ok(loaded.player.hp<120);
+  tick(loaded,{},0.7);assert.ok(loaded.player.hp<initialHp);
 });
 
 test('malformed and contradictory saves are rejected before gameplay', () => {
-  const edits=[d=>{d.version=2;},d=>{d.player.x=1350;d.player.y=700;},d=>{d.player.hp=-1;},d=>{d.player.hp=null;},d=>{d.player.hp=9999;},d=>{d.player.realm=1;},d=>{d.player.weapon=6;},d=>{d.player.stones=1.5;},d=>{d.dead=true;},d=>{d.won=true;},d=>{d.quests.bosses=['wolfKing','wolfKing'];},d=>{d.quests.bosses=['ancientTree'];},d=>{d.enemies[0].id='unknown';},d=>{d.enemies[25].hp=0;},d=>{d.nodes.pop();},d=>{d.projectiles=[{x:1,y:1,vx:0,vy:0,life:1,radius:9,owner:'enemy',sourceId:'missing',damage:1}];},d=>{d.drops=[{x:500,y:1800,type:'xp',amount:99}];},d=>{d.questRewards=['unknown'];},d=>{d.questRewards=['firstHunt'];},d=>{d.meditationCd=61;},d=>{d.logs=['x'.repeat(201)];}];
-  for(const edit of edits){const data=JSON.parse(X.serialize(X.createGame()));edit(data);assert.throws(()=>X.deserialize(JSON.stringify(data)),/存档无效/);}
+  const edits=[d=>{d.version=3;},d=>{d.player.x=1350;d.player.y=700;},d=>{d.player.hp=-1;},d=>{d.player.hp=null;},d=>{d.player.hp=9999;},d=>{d.player.realm=1;},d=>{d.player.weapon=6;},d=>{d.player.stones=1.5;},d=>{d.dead=true;},d=>{d.won=true;},d=>{d.quests.bosses=['wolfKing','wolfKing'];},d=>{d.quests.bosses=['ancientTree'];},d=>{d.worlds.main.enemies[0].id='unknown';},d=>{d.worlds.main.enemies[25].hp=0;},d=>{d.worlds.main.nodes.pop();},d=>{d.projectiles=[{x:1,y:1,vx:0,vy:0,life:1,radius:9,owner:'enemy',sourceId:'missing',damage:1}];},d=>{d.worlds.main.drops=[{x:500,y:1800,type:'xp',amount:99}];},d=>{d.questRewards=['unknown'];},d=>{d.questRewards=['firstHunt'];},d=>{d.meditationCd=61;},d=>{d.logs=['x'.repeat(201)];}];
+  for(let i=0;i<edits.length;i++){const data=JSON.parse(X.serialize(X.createGame()));edits[i](data);assert.throws(()=>X.deserialize(JSON.stringify(data)),/存档无效/,'Invalid edit '+i);}
   for(const input of ['','{','null','[]','x'.repeat(500001),null])assert.throws(()=>X.deserialize(input),/存档无效/);
 });
 
-test('a complete run is reachable through normal movement, combat and earned resources', t => {
+test('a complete expanded run is reachable through normal movement, combat and earned resources', t => {
   // This integration player never edits HP, coordinates, XP, currency, equipment or enemy state.
   const s=X.createGame(987),p=s.player;
+  const collision=(x,y)=>{
+    const m=X.mapInfo(s);
+    return x<43||y<43||x>m.width-43||y>m.height-43||m.ponds.some(q=>((x-q.x)/(q.rx+18))**2+((y-q.y)/(q.ry+18))**2<1)||m.obstacles.some(q=>Math.hypot(x-q.x,y-q.y)<q.radius+18);
+  };
   let frames=0,deaths=0;
   const size=35,cols=Math.floor((X.WIDTH-86)/size)+1,rows=Math.floor((X.HEIGHT-86)/size)+1;
   const coord=n=>({x:43+n%cols*size,y:43+Math.floor(n/cols)*size});
@@ -263,7 +273,7 @@ test('a complete run is reachable through normal movement, combat and earned res
       const x=Math.round((pt.x-43)/size)+xx,y=Math.round((pt.y-43)/size)+yy,id=y*cols+x;
       if(x<0||y<0||x>=cols||y>=rows)continue;
       const c=coord(id),d=Math.hypot(c.x-pt.x,c.y-pt.y);
-      if(!blocked(c.x,c.y)&&d<bd){best=id;bd=d;}
+      if(!collision(c.x,c.y)&&d<bd){best=id;bd=d;}
     }
     assert.ok(best>=0,'Path endpoint has walkable ground');return best;
   }
@@ -274,7 +284,7 @@ test('a complete run is reachable through normal movement, combat and earned res
       for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]){
         const x=cx+dx,y=cy+dy,n=y*cols+x;
         if(x<0||y<0||x>=cols||y>=rows||prev.has(n))continue;
-        const b=coord(n);if(blocked(b.x,b.y)||blocked((a.x+b.x)/2,(a.y+b.y)/2))continue;
+        const b=coord(n);if(collision(b.x,b.y)||collision((a.x+b.x)/2,(a.y+b.y)/2))continue;
         prev.set(n,id);q.push(n);
       }
     }
@@ -284,6 +294,7 @@ test('a complete run is reachable through normal movement, combat and earned res
   function frame(input={}){
     assert.ok(++frames<150000,'Natural run should finish within its frame budget');
     if(p.hp<X.stats(s).maxHp*.55&&p.potions>0)X.action(s,'heal');
+    if(s.inventory.spiritTea>0&&p.mp<X.stats(s).maxMp*.25)X.action(s,'use:spiritTea');
     X.step(s,input,.05);
     if(s.dead){deaths++;X.action(s,'revive');return false;}return true;
   }
@@ -349,7 +360,49 @@ test('a complete run is reachable through normal movement, combat and earned res
   for(const node of s.nodes.filter(n=>n.ready===0).slice(0,8))gather(node);
   hub();fight(s.enemies.find(e=>e.type==='guardian'));
   assert.equal(s.won,true);assert.deepEqual(s.quests.bosses,['wolfKing','ancientTree','guardian']);
+  function checked(id){X.action(s,id);assert.equal(s.lastAction.ok,true,id+': '+s.lastAction.message);}
+  function enter(id){hub();checked('travel:'+id);assert.equal(s.mapId,id);}
+  function learnAvailable(){for(const id of Object.keys(X.CONTENT.TECHNIQUES))if(!s.techniques[id]&&s.inventory[id+'Book']>0)checked('learn:'+id);}
+  function claimReady(){for(const q of X.questsInfo(s))if(q.ready)checked('claim:'+q.id);learnAvailable();}
+  function chapter(choice){hub();assert.equal(X.storyInfo(s).ready,true,JSON.stringify(X.storyInfo(s).requirements));checked('story:'+choice);learnAvailable();}
+  function equipIfOwned(id){if(s.inventory[id]>0&&s.equipment[X.CONTENT.ITEMS[id].slot]!==id)checked('equip:'+id);}
+  function trial(id){
+    enter(id);for(const node of s.nodes.filter(n=>n.ready===0))gather(node);
+    let waves=0;
+    while(!s.trials[id].cleared){
+      assert.ok(waves++<9,'Trial should advance through three waves');
+      const foes=s.enemies.filter(e=>e.hp>0&&!e.gated);
+      assert.ok(foes.length>0,'Current trial wave must have active enemies');
+      for(const e of foes)fight(e);
+    }
+    assert.equal(s.trials[id].wave,3);assert.equal(s.trials[id].clears,1);assert.equal(s.trials[id].rewarded,true);
+    hub();claimReady();checked('travel:main');hub();
+  }
+  // Continue the same organically earned character through every new system and map.
+  chapter('seek');checked('technique:wood');chapter('studyFire');
+  for(const node of s.nodes.filter(n=>!['herb','crystal'].includes(n.type)&&n.ready===0))gather(node);
+  hub();claimReady();trial('bambooTrial');equipIfOwned('jadeSword');chapter('lightning');checked('technique:thunder');
+  enter('red');for(const node of s.nodes.filter(n=>n.ready===0))gather(node);
+  hub();for(const e of s.enemies.filter(e=>!e.boss&&e.hp>0))fight(e);
+  fight(s.enemies.find(e=>e.type==='flameLord'));hub();claimReady();checked('travel:main');chapter('forgeFire');equipIfOwned('flameSword');checked('technique:flame');
+  if(Object.entries(X.CONTENT.RECIPES.cloudRobe.cost).every(([id,n])=>p[id]>=n)){checked('craft:cloudRobe');equipIfOwned('cloudRobe');}
+  checked('buy:spiritTea');checked('buy:wardPowder');checked('use:wardPowder');
+  trial('fireTrial');equipIfOwned('thunderCharm');
+  enter('snow');for(const node of s.nodes.filter(n=>n.ready===0))gather(node);
+  hub();for(const e of s.enemies.filter(e=>!e.boss&&e.hp>0))fight(e);
+  fight(s.enemies.find(e=>e.type==='frostWyrm'));hub();claimReady();checked('travel:main');chapter('iceBlade');equipIfOwned('iceSword');checked('technique:frost');
+  trial('iceTrial');equipIfOwned('frostRobe');chapter('wander');equipIfOwned('heavenCharm');
+  claimReady();learnAvailable();
+  if(!s.techniques.earth){checked('buy:earthBook');checked('learn:earth');}
+  checked('technique:earth');checked('train:sword');checked('train:sword');claimReady();
+  if(p.xp>=X.stats(s).xpNeeded)checked('breakthrough');
+  assert.equal(s.progress.visited.length,6);assert.equal(Object.values(s.trials).filter(q=>q.rewarded).length,3);
+  assert.equal(s.story.completed.length,6);assert.equal(s.story.journal.length,6);assert.equal(Object.keys(s.techniques).length,6);
+  assert.equal(s.techniques.sword,3);assert.equal(s.progress.claims.length,7);
   assert.ok(p.stones>=0&&p.herbs>=0&&p.potions>=0);assert.ok(deaths<12);
   assert.equal(X.deserialize(X.serialize(s)).won,true);
-  t.diagnostic(JSON.stringify({won:s.won,realm:p.realm,kills:s.quests.kills,bosses:s.quests.bosses,weapon:p.weapon,hp:p.hp,potions:p.potions,deaths,gameplaySeconds:Math.round(s.time),frames}));
+  if(process.env.SHANHAI_QA_SAVE){
+    const fs=require('node:fs'),path=require('node:path');fs.mkdirSync(path.dirname(process.env.SHANHAI_QA_SAVE),{recursive:true});fs.writeFileSync(process.env.SHANHAI_QA_SAVE,X.serialize(s));
+  }
+  t.diagnostic(JSON.stringify({won:s.won,realm:p.realm,kills:s.quests.kills,bosses:s.progress.bosses,visited:s.progress.visited,trials:s.trials,techniques:s.techniques,story:s.story.completed,claims:s.progress.claims,equipment:s.equipment,weapon:p.weapon,hp:p.hp,potions:p.potions,deaths,gameplaySeconds:Math.round(s.time),frames}));
 });

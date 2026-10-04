@@ -23,15 +23,16 @@ jobs:
           node-version: 22
       - name: Verify JavaScript and gameplay
         run: |
+          node --check content.js
           node --check engine.js
           node --check renderer.js
           node --check app.js
           node --check server.cjs
-          node --test tests/engine.test.cjs
+          node --test tests/*.test.cjs
       - name: Assemble static game
         run: |
           mkdir -p _site/assets
-          cp index.html style.css engine.js renderer.js app.js .nojekyll _site/
+          cp index.html style.css content.js engine.js renderer.js app.js .nojekyll _site/
           cp assets/favicon.svg assets/cover.png assets/pine.png assets/cultivator.png _site/assets/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
