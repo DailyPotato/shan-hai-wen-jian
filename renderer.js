@@ -64,7 +64,10 @@
       this.terrain=document.createElement('canvas');this.terrain.width=meta.width||W;this.terrain.height=meta.height||H;this.scenery=[];
       if(id==='main')this.makeWorld();else this.makeOtherWorld(meta);
       const original=['master','forge','alchemy','shrine'];
-      for(const npc of meta.npcs||[])if(id!=='main'||!original.includes(npc.id))this.scenery.push({type:npc.id==='merchant'?'merchant':npc.id==='storyteller'?'storyteller':npc.id==='waygate'?'portal':original.includes(npc.id)?npc.id:'storyteller',x:npc.x,y:npc.y,scale:1,name:npc.name,target:npc.target});
+      for(const npc of meta.npcs||[])if(id!=='main'||!original.includes(npc.id)){
+        const character=window.Xian.CONTENT?.NPC_CHARACTERS?.[npc.id];
+        this.scenery.push({type:character?'npcCharacter':npc.id==='merchant'?'merchant':npc.id==='storyteller'?'storyteller':npc.id==='waygate'?'portal':original.includes(npc.id)?npc.id:'storyteller',x:npc.x,y:npc.y,scale:1,name:npc.name,target:npc.target,npcId:npc.id,skin:npc.skin||character?.skin||npc.id,color:npc.color||character?.color,role:npc.role||character?.role});
+      }
       for(const portal of meta.portals||[])this.scenery.push({...portal,type:'portal',scale:1.15});
       this.mapCache.set(id,{terrain:this.terrain,scenery:this.scenery});
       // Retain at most three large terrain surfaces; every map rebuild is deterministic.
@@ -206,7 +209,7 @@
     }
     draw(state, dt=0.016){
       this.ensureMap(state);
-      const c=this.ctx; this.t += Math.min(dt,.1); const p=state.player; this.currentPlayer = p;
+      const c=this.ctx; this.t += Math.min(dt,.1); const p=state.player; this.currentPlayer = p;this.currentState=state;
       this.camera.x=p.x;this.camera.y=p.y;
       // Clamp the viewport to the world edge where possible.
       const hw=this.width/(2*this.zoom),hh=this.height/(2*this.zoom);
@@ -239,7 +242,14 @@
         c.globalAlpha=(cold?.5:.25)+Math.sin(this.t*2+i)*.16;ellipse(c,x,y,cold?1.9:1.6,cold?1.9:1.6,cold?'#f0f6e8':fire?'#ffb373':'#dae8b1');
       }c.globalAlpha=1;
       const npcs=this.mapMeta?.npcs||[{id:'master',x:440,y:1680,name:'凌云真人'},{id:'forge',x:670,y:1800,name:'铸剑台'},{id:'alchemy',x:380,y:1900,name:'灵药炉'},{id:'shrine',x:580,y:1970,name:'聚灵阵'}];
-      for(const o of npcs){if(Math.hypot(p.x-o.x,p.y-o.y)<140){label(c,o.name||o.id,o.x,o.y-84,'#f0e4b6',12);if(Math.hypot(p.x-o.x,p.y-o.y)<105)label(c,'[ E ] 交互',o.x,o.y+34,'#fcf3d4',11);}}
+      for(const o of npcs){
+        const distance=Math.hypot(p.x-o.x,p.y-o.y),character=window.Xian.CONTENT?.NPC_CHARACTERS?.[o.id];
+        if(distance<(character?250:140)){
+          label(c,o.name||o.id,o.x,o.y-84,character?.color||'#f0e4b6',12);
+          if(character){label(c,character.role,o.x,o.y-67,'#c5d2b5',10);const info=window.Xian.npcInfo?.(state,o.id);if(info&&(!info.met||info.commission?.ready))label(c,info.commission?.ready?'◆':'!',o.x,o.y-105,'#f3d58d',17);}
+          if(distance<105)label(c,'[ E ] 交互',o.x,o.y+34,'#fcf3d4',11);
+        }
+      }
       for(const o of this.mapMeta?.portals||[]){if(Math.hypot(p.x-o.x,p.y-o.y)<175){label(c,o.name||'秘境入口',o.x,o.y-78,'#e4e5b9',12);if(Math.hypot(p.x-o.x,p.y-o.y)<105)label(c,'[ E ] 穿越灵门',o.x,o.y+30,'#fff0bd',11);}}
       // Viewport atmosphere applied in screen space.
       c.setTransform(this.dpr,0,0,this.dpr,0,0);
@@ -249,8 +259,10 @@
     }
     scenerySprite(c,o){
       c.save();c.translate(o.x,o.y);c.scale(o.scale||1,o.scale||1);
+      if(o.type==='temple'&&this.currentPlayer.y<o.y&&this.currentPlayer.y>o.y-190&&Math.abs(this.currentPlayer.x-o.x)<120*(o.scale||1))c.globalAlpha=.38;
       const sway=Math.sin(this.t*1.1+(o.seed||0))*.012;
       switch(o.type){
+        case 'npcCharacter':this.npcCharacter(c,o);break;
         case 'pine':{
           if(this.sprites.pine){
             shadow(c,0,0,32,11,.2);
@@ -338,6 +350,71 @@
           c.fillStyle='#526e63';c.fillRect(-20,-81,40,17);label(c,old?'古墟':'青云',0,-71,'#d5c792',12);break;
         }
       }c.restore();
+    }
+    npcCharacter(c,o){
+      const t=this.t,skin=o.skin||o.npcId,bob=Math.sin(t*1.8+o.x*.01)*1.2,color=o.color||'#d5c18c';
+      shadow(c,0,0,24,8,.2);
+      if(Math.hypot(this.currentPlayer.x-o.x,this.currentPlayer.y-o.y)<105)ellipse(c,0,3,28,10,null,color+'a0',1.5);
+      c.save();c.translate(0,bob);c.scale(1.25,1.25);
+      if(skin==='trialKeeper'){
+        const aura=c.createRadialGradient(0,-28,1,0,-28,44);aura.addColorStop(0,'#a8ebc044');aura.addColorStop(1,'#a8ebc000');ellipse(c,0,-28,44,44,aura);
+        path(c,[[-16,2],[-11,-19],[-16,-41],[0,-56],[16,-41],[11,-19],[16,2],[0,-6]],'#689a8c','#b9e5bb',1.5);
+        path(c,[[-12,-39],[0,-49],[12,-39],[8,-27],[0,-22],[-8,-27]],'#bdcdad','#3d7168');
+        line(c,[[-7,-35],[-2,-33]],'#214e4b',2);line(c,[[7,-35],[2,-33]],'#214e4b',2);
+        path(c,[[0,-22],[7,-14],[0,-5],[-7,-14]],'#d9dfa2');
+        for(let i=0;i<4;i++){const a=t*.55+i*TAU/4;ellipse(c,Math.cos(a)*25,-27+Math.sin(a)*20,2,3,'#dff5bb');}
+        ellipse(c,0,7,30,10,null,'#b8d7ac88',1);c.restore();return;
+      }
+      const robes={elder:['#d1d0af','#7e9b91'],disciple:['#568a89','#d7dcbd'],herbalist:['#809d64','#d6cfa5'],hunter:['#766b52','#b1ab81'],broker:['#7b6380','#d4b88b'],fireArtisan:['#655553','#d7905f'],snowHealer:['#80a5b9','#e2e4cf']};
+      const palette=robes[skin]||['#658375','#d6cba0'];
+      if(skin==='elder'){
+        ellipse(c,-26,-11,14,5,'#687f6c','#afba93');path(c,[[-37,-17],[-19,-17],[-19,-13],[-37,-13]],'#c8bc95');
+        path(c,[[-33,-18],[-32,-31],[-29,-31],[-28,-18]],'#ddcea0');
+      }
+      if(skin==='disciple'){
+        line(c,[[15,-3],[24,-55]],'#e2e9cf',3);line(c,[[15,-13],[29,-10]],'#cbb477',3);line(c,[[21,-47],[25,-58]],'#637f80',4);
+        line(c,[[35,-1],[35,-39]],'#837652',5);line(c,[[22,-31],[48,-31]],'#a29a6c',5);ellipse(c,35,-46,7,8,'#b7ad83');
+      }
+      if(skin==='herbalist'){
+        path(c,[[-26,-5],[-28,-24],[-11,-28],[-9,-5]],'#977c52','#c9b688');
+        for(let i=0;i<5;i++){line(c,[[-24+i*3,-9],[-23+i*3,-23]],'#c2a46d',1);line(c,[[-20+i*2,-22],[-25+i*5,-35]],'#5e9366',2);ellipse(c,-25+i*5,-35,4,3,'#abc385');}
+      }
+      if(skin==='hunter'){
+        path(c,[[-18,-15],[-20,-43],[-14,-48],[-10,-14]],'#8b7654','#c7ad7f');
+        for(let i=0;i<3;i++)line(c,[[-17+i*2,-35],[-19+i*2,-53]],'#d8c099',1.5);
+        path(c,[[-19,-49],[-24,-55],[-18,-54]],'#ded4b7');
+      }
+      if(skin==='broker'){
+        path(c,[[18,0],[18,-22],[42,-22],[43,0]],'#997e5e','#ccb184',1);
+        line(c,[[20,-11],[41,-11]],'#c4ab78',1);line(c,[[30,-21],[30,-1]],'#c4ab78',1);
+        for(let i=0;i<3;i++)ellipse(c,23+i*7,-26,4,5,['#b1be8f','#93c2b1','#d3bb7a'][i]);
+        line(c,[[36,-24],[37,-60]],'#806b4e',2);path(c,[[37,-60],[55,-58],[51,-40],[37,-43]],'#79556a','#be9d84');
+        c.font='13px SimSun,serif';c.fillStyle='#e0ca8c';c.textAlign='center';c.fillText('易',45,-46);
+      }
+      if(skin==='fireArtisan'){
+        path(c,[[20,-5],[24,-12],[24,-19],[19,-23],[42,-23],[38,-18],[35,-12],[40,-5]],'#84918b','#a4b6a0');
+        ellipse(c,32,1,18,5,'#605e50');path(c,[[23,-26],[21,-34],[25,-29],[29,-40],[32,-31],[38,-35],[37,-26]],'#e5aa68');
+      }
+      if(skin==='snowHealer'){
+        line(c,[[-23,-1],[-23,-54]],'#8299a0',2);path(c,[[-29,-46],[-30,-31],[-23,-26],[-16,-31],[-17,-46]],'#b8d2d0','#d4e5d8');
+        ellipse(c,-23,-36,4,7,'#e2e8bd');ellipse(c,-23,-36,17,20,'#c7ece922');
+      }
+      this.human(c,palette[0],palette[1],false,t,0);
+      if(skin==='elder'){
+        path(c,[[-6,-26],[-3,-15],[2,-10],[6,-23]],'#e6e5cc');line(c,[[20,1],[19,-52]],'#a59a73',2.5);ellipse(c,19,-53,4,5,'#d5dab4');
+        path(c,[[-10,-27],[-9,-24],[4,-21],[7,-27]],'#e1d5af','#9da685');line(c,[[-8,-25],[5,-23]],'#7b8f7c',1);
+      }else if(skin==='herbalist'){
+        path(c,[[-15,-34],[0,-47],[15,-34]],'#bbac7a','#d9c493');line(c,[[-14,-34],[15,-34]],'#766748',2);
+      }else if(skin==='hunter'){
+        path(c,[[-8,-25],[-11,-16],[0,-13],[11,-16],[8,-25]],'#9c9674');line(c,[[21,3],[22,-44]],'#837354',2);path(c,[[22,-52],[18,-43],[26,-43]],'#cbd6ba');
+      }else if(skin==='broker'){
+        path(c,[[-8,-36],[-10,-44],[8,-44],[8,-36]],'#544e60','#c2a782');ellipse(c,13,-7,6,8,'#c5a470','#edd094');
+      }else if(skin==='fireArtisan'){
+        path(c,[[-7,-21],[-9,0],[9,0],[7,-21]],'#947451','#c9a26d');line(c,[[10,-16],[23,-33]],'#b6a787',3);path(c,[[17,-36],[22,-42],[33,-35],[28,-29]],'#7c8781','#b9c1a8');
+      }else if(skin==='snowHealer'){
+        path(c,[[-6,-29],[0,-25],[6,-29],[3,-16],[-3,-16]],'#ecefdc');path(c,[[8,-18],[9,-6],[21,-8],[20,-20],[14,-17]],'#d5d8bd','#779b9d');line(c,[[14,-17],[15,-8]],'#8aa99b',1);
+      }
+      c.restore();
     }
     building(c,w,h,roof,ornate){
       shadow(c,0,0,w*.64,20,.2);path(c,[[-w*.43,0],[-w*.43,-h],[w*.43,-h],[w*.43,0]],'#c2c2a5','#748d79');

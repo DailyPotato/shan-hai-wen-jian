@@ -222,9 +222,18 @@
     lastModalFocus = document.activeElement;
     modalKind = kind;
     if (kind === 'cultivate') content = content.replace('</p>', `</p>${rootMarkup()}`);
-    $('modal').classList.toggle('wide-modal', ['map','techniques','bag','story','master','storyteller','merchant','alchemy','forge'].includes(kind));
+    $('modal').classList.toggle('wide-modal', kind.startsWith('npc:') || ['map','techniques','bag','story','master','storyteller','merchant','alchemy','forge'].includes(kind));
     $('modal').innerHTML = `<header class="modal-header"><div><span class="eyebrow">${esc(eyebrow)}</span><h2 id="modal-title">${esc(title)}</h2></div>${closeable ? '<button class="modal-close" data-ui="close" aria-label="关闭面板">×</button>' : ''}</header>${content}`;
     $('modal-backdrop').classList.remove('hidden');
+    if(kind==='techniques')augmentTechniquePanel();
+    if(kind.startsWith('npc:')){
+      const info=Xian.npcInfo(state,kind.slice(4)),commission=info.commission;
+      if(commission){
+        if(!info.met){const reason=document.createElement('p');reason.className='npc-disabled-reason';reason.textContent='先选择交谈立场，相识之后即可接取委托。';$('modal').querySelector('.npc-commission').appendChild(reason);}
+        if(Object.keys(commission.cost || {}).length){const cost=document.createElement('p');cost.className='commission-reward';cost.textContent=`交付所需：${resourcesText(commission.cost)}`;$('modal').querySelector('.commission-progress').after(cost);}
+      }
+      for(const choice of $('modal').querySelectorAll('.npc-talk-choices button:disabled'))if(!choice.querySelector('small')){const reason=document.createElement('small');reason.textContent=info.met?'初谈立场已经确定，赠礼不会重复。':'请在安全区域内靠近此人物交谈。';choice.appendChild(reason);}
+    }
     if(kind==='map'){
       const preview=document.createElement('canvas');preview.width=320;preview.height=240;preview.className='destination-preview';preview.setAttribute('aria-label','所选地图地形与传送门');
       $('modal').querySelector('.destination-meta').before(preview);
@@ -263,7 +272,7 @@
     showModal('pause', '山静，剑亦静', 'JOURNEY AT REST', `<p class="lede">暂歇片刻。山海会等你归来。</p><div class="modal-actions">${button('继续游历','close','main')}${button('修为与境界','cultivate')}${button('山海舆图','map')}${button('六道功法','techniques')}${button('见闻与任务','story')}${button('行囊','bag')}${button('游玩指引','help')}</div><h3>仙途存档</h3><p>进度每 10 秒自动保存。导出备份可在另一台电脑上继续旅程。旧版存档会保留已有修为并迁移到山海新篇。</p><div class="modal-actions">${button('立即保存','save')}${button('导出存档','export','subtle')}${button('导入存档','import','subtle')}${button('返回首页','home','subtle')}</div>${panelFeedback()}<div class="shortcut-footer">ESC · 继续游戏</div>`);
   }
   function helpPanel() {
-    showModal('help','初入山海','THE WAY OF THE SWORD',`<p class="lede">这是一段可以亲手走过的仙途。移动、瞄准与闪避，都是你自己的选择。</p><div class="keys-table"><div><kbd>W A S D / ↑↓←→</kbd>移动</div><div><kbd>鼠标左键</kbd>瞄准并挥剑</div><div><kbd>Q</kbd>御剑诀 · 消耗灵力</div><div><kbd>Space</kbd>踏风步 · 短暂闪避</div><div><kbd>E</kbd>采集 / 道院交互</div><div><kbd>R</kbd>服用回春丹</div><div><kbd>B</kbd>行囊 / 使用装备</div><div><kbd>M</kbd>世界舆图 / 安全渡界</div><div><kbd>K</kbd>学习 / 修习 / 装入 Q</div><div><kbd>J</kbd>故事抉择 / 委托 / 手记</div><div><kbd>Esc</kbd>暂停 / 关闭面板</div></div><h3>循序渐进，问道长生</h3><p>从西南方青云观出发。在山野斩妖、采集灵草与灵晶，积攒修为和灵石。回道院炼丹、锻剑、休养；达到修为门槛后，在凌云真人处突破境界。</p><p>依次挑战苍牙狼王、千年木灵和天门守卫。更高的境界才足以解开后两位守关者的封印。观察地面上的攻击预警，用踏风步躲开。</p><h3>山海新篇</h3><p>灵根有五等品质与八种属性；功法相契会得到实际增益。从安全营地打开 M 可前往六片山海，野外可亲自走到传送门按 E。洞天包含三重试炼，首次通关有独有奖励。</p><p>拜访云游商人获取残卷，按 K 学习功法、修习重数并装入 Q。按 B 查看八类灵材、丹药、典籍与三类装备，炼制或购买后需要亲手使用与装备。按 J 与山海人物作出抉择、领取委托奖励；选择会改变你的实际所得与人缘。</p><p class="modal-note">小地图金色菱形是道院，红色标记是守关者。气血耗尽后可回道院重整旗鼓，已有的境界与斩妖进度会保留。面板打开时游戏暂停。</p><div class="modal-actions">${button(state?'我已知晓，继续游历':'我已知晓','close','main')}</div>`);
+    showModal('help','初入山海','THE WAY OF THE SWORD',`<p class="lede">这是一段可以亲手走过的仙途。移动、瞄准与闪避，都是你自己的选择。</p><div class="keys-table"><div><kbd>W A S D / ↑↓←→</kbd>移动</div><div><kbd>鼠标左键</kbd>瞄准并挥剑</div><div><kbd>Q</kbd>御剑诀 · 消耗灵力</div><div><kbd>Space</kbd>踏风步 · 短暂闪避</div><div><kbd>E</kbd>采集 / 道院交互</div><div><kbd>R</kbd>服用回春丹</div><div><kbd>B</kbd>行囊 / 使用装备</div><div><kbd>M</kbd>世界舆图 / 安全渡界</div><div><kbd>K</kbd>学习 / 修习 / 装入 Q</div><div><kbd>J</kbd>故事抉择 / 委托 / 手记</div><div><kbd>Esc</kbd>暂停 / 关闭面板</div></div><h3>循序渐进，问道长生</h3><p>从西南方青云观出发。在山野斩妖、采集灵草与灵晶，积攒修为和灵石。回道院炼丹、锻剑、休养；达到修为门槛后，在凌云真人处突破境界。</p><p>依次挑战苍牙狼王、千年木灵和天门守卫。更高的境界才足以解开后两位守关者的封印。观察地面上的攻击预警，用踏风步躲开。</p><h3>仙缘与法意</h3><p>八位山海人物各有所长，靠近按 E 交谈。初谈立场与赠礼只能选择一次；相识后可接取人物委托，或支付真实灵材使用其服务。交付必须亲自回到人物身边，服务间隔随实际游历时间推进。</p><p>功法重数代表熟练，品阶代表法意，彼此独立。按 K 查看黄、玄、地、天、仙五阶的当前倍率与升品条件；提升品阶须满足重数、境界、灵材和秘境条件。传功长老顾清玄可指引升品之路。</p><h3>山海新篇</h3><p>灵根有五等品质与八种属性；功法相契会得到实际增益。从安全营地打开 M 可前往六片山海，野外可亲自走到传送门按 E。洞天包含三重试炼，首次通关有独有奖励。</p><p>拜访云游商人获取残卷，按 K 学习功法、修习重数并装入 Q。按 B 查看八类灵材、丹药、典籍与三类装备，炼制或购买后需要亲手使用与装备。按 J 与山海人物作出抉择、领取委托奖励；选择会改变你的实际所得与人缘。</p><p class="modal-note">小地图金色菱形是道院，红色标记是守关者。气血耗尽后可回道院重整旗鼓，已有的境界与斩妖进度会保留。面板打开时游戏暂停。</p><div class="modal-actions">${button(state?'我已知晓，继续游历':'我已知晓','close','main')}</div>`);
   }
   function statsCard(name, value, suffix = '') {return `<div class="stat-card"><small>${name}</small><strong>${esc(value)}${suffix ? `<em> ${esc(suffix)}</em>` : ''}</strong></div>`;}
   function rootMarkup() {
@@ -291,6 +300,41 @@
     const book=entries('ITEMS').find(i=>i.type==='book'&&i.technique===selected.id);
     const count=book?(state.inventory[book.id] || 0):0;
     showModal('techniques','六道功法','SCHOOLS OF THE IMMORTAL ART',`<p class="compact-lede">功法随灵根相契。学习后可修至三重，择一法装入 Q；各门功法带来不同的战斗变化。</p><div class="techniques-layout"><div class="technique-list">${all.map(t=>{const info=Xian.techniqueInfo(state,t.id),element=elementInfo(t.element);return `<button class="technique-choice ${selectedTechnique===t.id?'selected':''}" data-tech="${esc(t.id)}" style="--element:${esc(element.color || t.color || '#d8c18b')}"><span class="technique-sigil">${esc(element.name || t.name.slice(0,1))}</span><div><strong>${esc(t.name)}</strong><small>${info.known ? `${info.level} / 3 重` : '未习得'}${state.activeTechnique===t.id?' · 当前 Q':''}</small></div>${info.affinity>0 ? '<span class="affinity-tag">相契</span>' : ''}</button>`;}).join('')}</div><section class="technique-detail" style="--element:${esc(el.color || selected.color || '#dcc18b')}"><span class="eyebrow">${esc(el.name)}系 · ${selected.known ? `${selected.level} 重` : '尚未习得'}</span><h3>${esc(selected.name)}</h3><p>${esc(selected.description)}</p><div class="stat-grid">${statsCard('灵力消耗',selected.manaCost)}${statsCard('施法间隔',Number(selected.cooldown).toFixed(1),'秒')}${statsCard('属性契合',`+${Math.round((selected.affinity || 0)*100)}%`)}</div>${selected.known ? `<h3>修习下一重</h3><p>${selected.level>=3?'功法已修至三重，术意圆满。':`${esc(resourcesText(selected.trainCost))} · ${selected.trainRealm ? '筑基' : '炼气'}境可修。`}</p>` : `<h3>功法传承</h3><p>${book ? `${esc(book.name)} · 持有 ${count} 本。可从云游商人、山野或试炼奖励中寻找。` : '在山海历练中寻找功法传承。'}</p>`}<div class="modal-actions">${selected.known ? `<button class="modal-button main" data-engine="technique:${esc(selected.id)}" ${state.activeTechnique===selected.id?'disabled':''}>${state.activeTechnique===selected.id?'已装入 Q':'装入 Q'}</button>${selected.level<3?actionButton('修习功法',`train:${selected.id}`):''}` : `<button class="modal-button main" data-engine="learn:${esc(selected.id)}" ${count<1?'disabled':''}>参悟功法</button>`}${button('查看灵根','root','subtle')}</div></section></div>${panelFeedback()}<div class="shortcut-footer">K · 功法　Q · 施放当前功法　ESC · 关闭</div>`);
+  }
+  function augmentTechniquePanel() {
+    const selected=Xian.techniqueInfo(state,selectedTechnique);
+    if(!selected || selected.gradeIndex===undefined)return;
+    for(const choice of $('modal').querySelectorAll('.technique-choice')){
+      const tech=Xian.techniqueInfo(state,choice.dataset.tech),badge=document.createElement('span');badge.className='technique-grade-badge';
+      badge.style.setProperty('--grade-color',tech.gradeColor || '#d3c49a');badge.textContent=tech.gradeName;
+      choice.querySelector('div').appendChild(badge);
+    }
+    const detail=$('modal').querySelector('.technique-detail'),block=document.createElement('section');block.className='technique-promotion';
+    const grades=['黄','玄','地','天','仙'];
+    block.innerHTML=`<div class="promotion-heading"><h3>功法品阶 <span style="color:${esc(selected.gradeColor)}">${esc(selected.gradeName)}</span></h3><span>独立于修习重数</span></div><div class="technique-grade-path">${grades.map((name,index)=>`<span class="${index===selected.gradeIndex?'current':index<selected.gradeIndex?'complete':''}" style="--grade-color:${esc(selected.gradeColor)}">${name}</span>`).join('')}</div><div class="promotion-bonus"><span>当前品阶道术倍率</span><strong>×${Number(selected.gradeMultiplier).toFixed(2)}</strong></div>${selected.gradeIndex>=4?'<p class="modal-note">此法已臻仙阶。选择相契装备，可进一步增强道术。</p>':`<p class="promotion-cost">升品灵材：${esc(resourcesText(selected.promoteCost)) || '无需灵材'}<br>境界要求：${['炼气','筑基','金丹','元婴'][selected.promoteRealm || 0]}境</p>${selected.promoteRequirements?.length?`<ul class="promotion-requirements">${selected.promoteRequirements.map(text=>`<li>${esc(text)}</li>`).join('')}</ul>`:''}<button class="modal-button main" data-engine="promote:${esc(selected.id)}" ${selected.canPromote?'':'disabled'} title="${esc(selected.promoteReason || '')}">提升功法品阶</button>${!selected.canPromote&&selected.promoteReason?`<p class="promotion-reason">${esc(selected.promoteReason)}</p>`:''}`}`;
+    detail.appendChild(block);
+  }
+  function characterPortrait(id,info) {
+    const colors={elder:'#b5b294',disciple:'#7ebbb3',herbalist:'#9fbc7c',hunter:'#b89b70',broker:'#bc999e',fireArtisan:'#d69a76',snowHealer:'#a6cddc',trialKeeper:'#a5c0a0'};
+    const color=info.color || colors[id] || '#abc1aa';
+    const hat=id==='hunter'?'<path d="M47 50 76 29 107 50 96 56H58Z" fill="#b3a06e"/>':id==='broker'?'<path d="M59 41h36v-12H64Z" fill="#35483c"/>':id==='elder'?'<path d="M73 69 86 69 83 86 73 88Z" fill="#d8d7b9"/>':'<path d="M77 35v-9m-8 5h17" fill="none" stroke="#d7d4a9" stroke-width="3"/>';
+    const accessory=id==='herbalist'?'<path d="M39 123v-34m0 20c-12 0-14-13-10-16 9 0 14 10 10 16Zm0-9c12-1 14-13 10-17-10 0-13 10-10 17Z" fill="#90b580"/>':id==='fireArtisan'?'<path d="m115 87-11 4 3 15 13-5Zm-5 14-6 28" fill="#bfa481"/>':id==='snowHealer'?'<path d="M117 89v36m-15-26 30 17m-30 0 30-17" fill="none" stroke="#b6e3ee" stroke-width="2"/>':id==='hunter'?'<path d="M111 69v67m0-67q30 34 0 67m0-67 14 34-14 33" fill="none" stroke="#aeb58c" stroke-width="2"/>':id==='broker'?'<path d="m112 90 16 6-5 22-16-6Z" fill="#cdb487"/><path d="m114 97 10 5m-11 2 9 5" stroke="#637457"/>':'<path d="M113 66v77m-6-69 6-11 7 11" fill="none" stroke="#d3bd80" stroke-width="3"/>';
+    return `<svg viewBox="0 0 160 175" role="img" aria-label="${esc(info.name)}人物立绘"><defs><linearGradient id="npc-back" x2="0" y2="1"><stop stop-color="#31513e"/><stop offset="1" stop-color="#102c20"/></linearGradient></defs><rect x="5" y="5" width="150" height="165" fill="url(#npc-back)" stroke="${esc(color)}" stroke-opacity=".25"/><circle cx="103" cy="49" r="27" fill="${esc(color)}" opacity=".1"/><path d="M5 137 35 107l26 30 30-37 39 35 25-26v61H5Z" fill="#5c795c" opacity=".18"/><ellipse cx="79" cy="151" rx="37" ry="8" fill="#092016" opacity=".5"/><path d="m66 71 27 1 15 69-13 11H61l-11-12Z" fill="${esc(color)}"/><path d="m66 72 13 22 15-22M79 94v51m-20-33 36-1" fill="none" stroke="#e3dcc0" stroke-opacity=".6" stroke-width="2"/><path d="m65 76-17 45 14 5 11-35m23-15 17 43-13 6-12-34" fill="${esc(color)}" stroke="#213e2b" stroke-width="1"/><path d="m69 147-4 11h13v-13m8 0v13h13l-6-11" fill="#254336"/><circle cx="79" cy="57" r="15" fill="#c7b99b"/><path d="M63 59c-5-22 31-28 33-1l-7-13-17-1Z" fill="#294130"/><path d="m70 62 5 0m9 0h5" stroke="#3d5342" stroke-width="1.5"/>${hat}${accessory}</svg>`;
+  }
+  function characterPanel(id) {
+    if(state.dead)return deathPanel();
+    const info=Xian.npcInfo(state,id);
+    if(!info)return;
+    const near=Boolean(info.near)&&Xian.isSafe(state)&&!state.dead,commission=info.commission;
+    const choices=info.choices || [],services=info.services || [];
+    const dialogue=Array.isArray(info.dialogue)?info.dialogue.join('\n'):info.dialogue;
+    const proximityReason=info.reason || '请靠近此人物，在安全区域内交谈。';
+    let commissionMarkup='';
+    if(commission){
+      const accepted=Boolean(commission.accepted),claimed=Boolean(commission.claimed || commission.completed),ready=Boolean(commission.ready);
+      commissionMarkup=`<section class="npc-commission"><span class="eyebrow">人物委托</span><h3>${esc(commission.name || commission.title)}</h3><p>${esc(commission.description)}</p><div class="commission-progress"><span>${accepted?'已接取':'未接取'}${claimed?' · 已领取奖励':''}</span><strong>${commission.progress ?? 0} / ${commission.target ?? 1}</strong></div><p class="commission-reward">所得：${esc(resourcesText(commission.reward))}</p><button class="modal-button ${claimed?'subtle':'main'}" data-engine="npc:${esc(id)}:${accepted?'claim':'accept'}" ${!near || !info.met || claimed || accepted&&!(commission.canClaim ?? ready)?'disabled':''}>${claimed?'委托已完成':accepted?ready?'交付委托，领取奖励':'尚待完成':'接取委托'}</button>${!near?`<p class="npc-disabled-reason">${esc(proximityReason)}</p>`:accepted&&!(commission.canClaim ?? ready)?`<p class="npc-disabled-reason">${esc(commission.reason || '完成委托目标后，再回来交付。')}</p>`:''}</section>`;
+    }
+    showModal(`npc:${id}`,info.name,'FATE · 山海有相逢',`<div class="npc-dialog-layout"><aside class="npc-identity">${characterPortrait(id,info)}<span class="eyebrow">${esc(info.role || '')}</span><h3>${esc(info.name)}</h3><p>${esc(typeof info.identity==='object'?info.identity.description:info.identity || info.description || '')}</p><div class="npc-rapport"><span>交情</span><strong>${info.rapport || 0}</strong></div>${id==='elder'?`<div class="modal-actions">${button('功法升品','techniques','subtle')}</div>`:''}</aside><div class="npc-conversation"><p class="npc-dialogue">${esc(dialogue)}</p><div class="npc-talk-choices">${choices.map(choice=>`<button class="story-option" data-engine="npc:${esc(id)}:talk:${esc(choice.id)}" ${!near || choice.available===false?'disabled':''}><strong>${esc(choice.label)}</strong><span>${esc(choice.description)}</span>${choice.reason?`<small>${esc(choice.reason)}</small>`:''}</button>`).join('')}</div>${!near?`<p class="npc-disabled-reason">${esc(proximityReason)}</p>`:''}${commissionMarkup}${services.length?`<h3>人物所长</h3><div class="npc-services">${services.map(service=>{const canUse=near&&info.met&&service.available!==false&&service.ready!==false;return `<article><div><strong>${esc(service.name || service.label)}</strong><p>${esc(service.description)}</p><span class="service-cost">${esc(resourcesText(service.cost))}${service.remaining?` · 再等 ${Math.ceil(service.remaining)} 秒`:''}</span>${!canUse?`<small>${esc(service.reason || (!near?proximityReason:'此服务暂不可用。'))}</small>`:''}</div><button class="modal-button ${canUse?'main':'subtle'}" data-engine="npc:${esc(id)}:service:${esc(service.id)}" ${canUse?'':'disabled'}>${esc(service.buttonLabel || '请教')}</button></article>`;}).join('')}</div>`:''}</div></div>${panelFeedback()}<div class="modal-actions">${button('告辞','close','subtle')}</div><div class="shortcut-footer">E · 与身边人物交谈　ESC · 关闭</div>`);
   }
   function storyPanel(kind = 'story') {
     if(state.dead)return deathPanel();
@@ -346,6 +390,7 @@
     showModal(`portal:${target}`,m.name,'THRESHOLD · 山海一线',`<p class="lede">传送门中，另一片山海正向你敞开。</p><p>${esc(m.description)}</p><p class="modal-note">${m.unlocked?`${m.type==='trial'?'踏入此地，将迎来三重试炼。':'沿途有不同的灵材、妖兽与守关者。'}渡界后从当地营地出发，可随时返回安全营地离开。`:`需达到${['炼气','筑基','金丹','元婴'][m.realmRequired]}境才可进入。`}</p><div class="modal-actions"><button class="modal-button main" data-engine="travel:${esc(target)}" ${m.unlocked?'':'disabled'}>穿过传送门</button>${button('暂不前往','close','subtle')}</div>${panelFeedback()}`);
   }
   function npcPanel(kind) {
+    if(catalog().NPC_CHARACTERS?.[kind])return characterPanel(kind);
     if (kind === 'master' || kind === 'storyteller') return storyPanel(kind);
     if (kind === 'waygate') return mapPanel(true);
     if (kind === 'merchant') return vendorPanel();
@@ -383,6 +428,7 @@
     else if (kind === 'bag') bagPanel();
     else if (kind === 'map') mapPanel();
     else if (kind === 'techniques') techniquesPanel();
+    else if (kind.startsWith('npc:')) characterPanel(kind.slice(4));
     else if (['story','master','storyteller'].includes(kind)) storyPanel(kind);
     else if (kind === 'merchant') vendorPanel();
     else if (kind === 'cultivate') cultivatePanel(kind);
@@ -422,6 +468,7 @@
     const skill=$('slot-skill');
     skill.querySelector('.slot-name').textContent=tech.name;
     skill.title=`${tech.name} · Q · 消耗 ${tech.manaCost} 灵力 · 间隔 ${tech.cooldown} 秒`;
+    if(tech.gradeName)skill.title+=` · ${tech.gradeName} · 品阶倍率 ×${Number(tech.gradeMultiplier).toFixed(2)}`;
     skill.setAttribute('aria-label',skill.title);
     skill.style.setProperty('--skill-color',tech.color || elementInfo(tech.element).color);
     if(skill.dataset.tech!==tech.id){skill.dataset.tech=tech.id;skill.querySelector('svg').innerHTML=icons[tech.id==='sword'?'skill':tech.id] || icons.skill;}
@@ -433,10 +480,12 @@
       slot.querySelector('.cooldown-number').textContent = cd > .2 && def.id !== 'attack' ? cd.toFixed(1) : '';
       if (def.id === 'heal') slot.querySelector('.potion-count').textContent = p.potions;
     }
-    let hint = '';
-    for (const npc of map.npcs || []) if (Math.hypot(p.x-npc.x,p.y-npc.y) < 105) {hint = npc.name;break;}
-    if(!hint)for(const portal of map.portals || [])if(Math.hypot(p.x-portal.x,p.y-portal.y)<110){hint=`渡界 · ${portal.name}`;break;}
-    if (!hint) for (const node of state.nodes || []) if (node.ready <= 0 && Math.hypot(p.x-node.x,p.y-node.y) < 90) {hint = node.type==='relic'?'查看古迹':`采集${resourceInfo(node.type==='herb'?'herbs':node.type==='crystal'?'stones':node.type).name}`;break;}
+    const candidates=[];
+    for(const npc of map.npcs || []){const d=Math.hypot(p.x-npc.x,p.y-npc.y);if(d<105)candidates.push({distance:d,label:npc.name});}
+    for(const portal of map.portals || []){const d=Math.hypot(p.x-portal.x,p.y-portal.y);if(d<105)candidates.push({distance:d,label:`渡界 · ${portal.name}`});}
+    for(const node of state.nodes || []){const d=Math.hypot(p.x-node.x,p.y-node.y);if(node.ready<=0&&d<90)candidates.push({distance:d,label:node.type==='relic'?'查看古迹':`采集${resourceInfo(node.type==='herb'?'herbs':node.type==='crystal'?'stones':node.type).name}`});}
+    candidates.sort((a,b)=>a.distance-b.distance);
+    const hint=candidates[0]?.label || '';
     $('interact-hint').classList.toggle('hidden', !hint || Boolean(modalKind) || state.dead);
     if (hint) $('interact-hint').querySelector('span').textContent = hint;
   }
@@ -456,6 +505,7 @@
     c.fillStyle='#141e2566';for(const rock of map.obstacles || []){c.beginPath();c.arc(rock.x*sx,rock.y*sy,rock.radius*sx,0,Math.PI*2);c.fill();}
     c.strokeStyle='#e9d8b655';c.lineWidth=2;for(const road of map.roads || []){c.beginPath();road.forEach((point,i)=>{const x=Array.isArray(point)?point[0]:point.x,y=Array.isArray(point)?point[1]:point.y;i?c.lineTo(x*sx,y*sy):c.moveTo(x*sx,y*sy);});c.stroke();}c.lineWidth=1;
     c.fillStyle='#e6cc8e';c.save();c.translate(map.hub.x*sx,map.hub.y*sy);c.rotate(Math.PI/4);c.fillRect(-3,-3,6,6);c.restore();
+    for(const npc of map.npcs || [])if(catalog().NPC_CHARACTERS?.[npc.id]){c.beginPath();c.arc(npc.x*sx,npc.y*sy,1.9,0,Math.PI*2);c.fillStyle=catalog().NPC_CHARACTERS[npc.id].color || '#edd2a1';c.fill();}
     for(const portal of map.portals || []){c.strokeStyle='#c8f1dc';c.beginPath();c.arc(portal.x*sx,portal.y*sy,3,0,Math.PI*2);c.stroke();}
     for(const enemy of state.enemies || []){if(enemy.hp<=0||enemy.active===false||enemy.dormant)continue;c.beginPath();c.arc(enemy.x*sx,enemy.y*sy,enemy.boss?3.3:1.2,0,Math.PI*2);c.fillStyle=enemy.boss?(enemy.gated?'#bbab8e':'#e6a278'):'#d29b7688';c.fill();}
     c.strokeStyle='#e8e5bc55';c.strokeRect(state.player.x*sx-17,state.player.y*sy-12,34,24);
@@ -474,6 +524,7 @@
     c.font='11px serif';c.textAlign='center';c.fillStyle='#eee4bd';c.fillText('安全营地',map.hub.x*sx,map.hub.y*sy+18);
     c.fillStyle='#e5d294';c.fillRect(map.hub.x*sx-3,map.hub.y*sy-3,6,6);
     for(const portal of map.portals){c.strokeStyle='#defbdd';c.lineWidth=2;c.beginPath();c.arc(portal.x*sx,portal.y*sy,5,0,Math.PI*2);c.stroke();c.fillStyle='#f6ecc2';c.fillText(portal.name,portal.x*sx,portal.y*sy-12);}
+    for(const npc of map.npcs || [])if(catalog().NPC_CHARACTERS?.[npc.id]){c.fillStyle=catalog().NPC_CHARACTERS[npc.id].color || '#eddfb4';c.fillRect(npc.x*sx-2,npc.y*sy-2,4,4);}
     if(map.id===state.mapId){for(const e of state.enemies){if(e.hp<=0||e.dormant)continue;c.beginPath();c.arc(e.x*sx,e.y*sy,e.boss?4:2,0,Math.PI*2);c.fillStyle=e.boss?'#f1b681':'#e9c28a77';c.fill();}c.fillStyle='#f7f3ce';c.beginPath();c.arc(state.player.x*sx,state.player.y*sy,4,0,Math.PI*2);c.fill();}
   }
   function input() {
@@ -497,7 +548,7 @@
         if(state.player.attackCd>beforeAttack+.1)sound.fx('attack');
         if(state.player.dashCd>beforeDash+.1)sound.fx('dash');
         if(state.player.skillCd>beforeSkill+.1)sound.fx('skill');
-        if(state.interaction && (npcNames[state.interaction] || state.interaction.startsWith('portal:')))npcPanel(state.interaction);
+        if(state.interaction && (npcNames[state.interaction] || catalog().NPC_CHARACTERS?.[state.interaction] || state.interaction.startsWith('portal:')))npcPanel(state.interaction);
         saveTimer+=dt;
         if(saveTimer>=10){saveTimer=0;save();}
       }

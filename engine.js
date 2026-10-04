@@ -92,7 +92,23 @@
     const direct=r.elements.includes(t.element),secondary=(linked[t.element]||[]).some(e=>r.elements.includes(e));
     let affinity=r.legacy?0:direct?g.affinity:secondary?g.affinity*.5:0;
     for(const item of Object.values(state.equipment||{})){const eq=CONTENT.ITEMS[item];if(eq&&eq.element===t.element)affinity+=eq.affinity||0;}
-    return {...t,level,known:level>0,maxLevel:3,affinity,multiplier:(1+affinity)*(1+Math.max(0,level-1)*.22),manaCost:Math.max(12,t.manaCost-(direct&&!r.legacy?2:0)),cooldown:Math.max(3,t.cooldown-Math.max(0,level-1)*.4),trainCost:level===1?{stones:45,[t.resource]:3,herbs:2}:{stones:110,[t.resource]:6,core:2},trainRealm:level>=2?1:0};
+    const gradeIndex=state.techniqueGrades&&state.techniqueGrades[id]||0,grade=Object.values(CONTENT.TECHNIQUE_GRADES).find(g=>g.index===gradeIndex);
+    const promotion=promotionInfo(state,id,gradeIndex+1);
+    return {...t,level,known:level>0,maxLevel:3,affinity,multiplier:(1+affinity)*(1+Math.max(0,level-1)*.22)*grade.multiplier,manaCost:Math.max(12,Math.floor((t.manaCost-(direct&&!r.legacy?2:0))*(1-grade.manaReduction))),cooldown:Math.max(3,(t.cooldown-Math.max(0,level-1)*.4)*(1-grade.cooldownReduction)),trainCost:level===1?{stones:45,[t.resource]:3,herbs:2}:{stones:110,[t.resource]:6,core:2},trainRealm:level>=2?1:0,grade:grade.id,gradeName:grade.name,gradeColor:grade.color,gradeIndex,gradeMultiplier:grade.multiplier,...promotion};
+  }
+
+  function promotionInfo(state,id,target){
+    const t=CONTENT.TECHNIQUES[id],grade=Object.values(CONTENT.TECHNIQUE_GRADES).find(g=>g.index===target);
+    if(!grade)return{promoteCost:null,promoteRealm:null,promoteRequirements:[],canPromote:false,promoteReason:'此法已至仙阶圆满。'};
+    const cost={stones:[0,35,90,180,320][target]};cost[t.resource]=(cost[t.resource]||0)+[0,2,4,6,10][target];
+    if(target===1)cost.herbs=2;if(target>=2)cost.core=[0,0,1,2,4][target];if(target>=3)cost.essence=(cost.essence||0)+[0,0,0,2,4][target];
+    const requirements=[`${grade.levelRequired} 重功法`,`${REALMS[grade.realmRequired].realmName}境`,...grade.trialsRequired.map(id=>`${CONTENT.MAPS[id].name}首次通关`)];
+    let reason='';if(!state.techniques||!state.techniques[id])reason='先习得这门功法。';
+    else if(state.techniques[id]<grade.levelRequired)reason=`需将此法研习至 ${grade.levelRequired} 重。`;
+    else if(state.player.realm<grade.realmRequired)reason=`需达到${REALMS[grade.realmRequired].realmName}境。`;
+    else{const missing=grade.trialsRequired.find(id=>!state.trials||!state.trials[id].rewarded);if(missing)reason=`需完成${CONTENT.MAPS[missing].name}首次通关。`;}
+    if(!reason&&state.dead)reason='先重聚灵身。';if(!reason&&!isSafe(state))reason='晋阶须在安全驿站进行。';if(!reason&&!canPay(state,cost))reason='材料不足，需要 '+costText(cost)+'。';
+    return{promoteCost:cost,promoteRealm:grade.realmRequired,promoteRequirements:requirements,canPromote:!reason,promoteReason:reason};
   }
 
   function zoneAt(x, y, stateOrId='main') {
@@ -169,13 +185,13 @@
   }
 
   function expand(state,legacy) {
-    state.version=2;state.mapId='main';state.worlds={};state.progress={visited:['main'],bosses:state.quests.bosses.slice(),gathered:{},claims:[]};
+    state.version=3;state.mapId='main';state.worlds={};state.progress={visited:['main'],bosses:state.quests.bosses.slice(),gathered:{},claims:[]};
     state.trials={};for(const m of Object.values(CONTENT.MAPS))if(m.type==='trial')state.trials[m.id]={wave:1,cleared:false,clears:0,rewarded:false};
     let n=(state.seed^0x9e3779b9)>>>0;n^=n<<13;n^=n>>>17;n^=n<<5;const pick=(n>>>0)%100;
     let grade='mortal',sum=0;for(const g of Object.values(CONTENT.ROOT_GRADES)){sum+=g.weight;if(pick<sum){grade=g.id;break;}}
     const elements=Object.keys(CONTENT.ELEMENTS),first=elements[(state.seed>>>0)%8],second=elements[((state.seed>>>3)+3)%8];
     state.root={grade:legacy?'mortal':grade,elements:legacy?['metal']:[first,...(second!==first&&state.seed%3===0?[second]:[])],legacy:!!legacy};
-    state.techniques={sword:1};state.activeTechnique='sword';state.inventory={starterSword:1,clothRobe:1};state.equipment={weapon:'starterSword',robe:'clothRobe',charm:null};state.buffs=[];
+    state.techniques={sword:1};state.techniqueGrades={sword:0};state.npcProgress={};state.activeTechnique='sword';state.inventory={starterSword:1,clothRobe:1};state.equipment={weapon:'starterSword',robe:'clothRobe',charm:null};state.buffs=[];
     state.story={chapter:0,choices:{},completed:[],journal:[],relations:{mercy:0,wisdom:0,valor:0}};
     for(const key of ['iron','spiritwood','ember','frost','core','essence'])state.player[key]=0;
     state.player.shield=0;state.player.shieldTime=0;state.player.slow=0;
@@ -250,17 +266,88 @@
     updateGates(state);
   }
 
+  function npcMeasure(state,commission){
+    if(commission.kind==='kills')return state.quests.kills;
+    if(commission.kind==='herbs')return state.quests.herbs;
+    if(commission.kind==='boss')return state.progress.bosses.includes(commission.boss)?1:0;
+    if(commission.kind==='trial')return state.trials[commission.trial].rewarded?1:0;
+    return 0;
+  }
+
+  function npcInfo(state,id){
+    const n=CONTENT.NPC_CHARACTERS[id];if(!n)return null;
+    const p=state.npcProgress&&state.npcProgress[id]||{met:false,choice:null,rapport:0,commission:{accepted:false,claimed:false,baseline:0},services:{}};
+    const near=state.mapId===n.mapId&&distance(n,state.player)<=105;
+    const vicinity=state.dead?'先重聚灵身。':!near?`请靠近${n.name}再交谈。`:!isSafe(state)?'请在安全驿站内交谈。':'';
+    const choices=n.choices.map(c=>({...c,available:!p.met&&!vicinity,reason:p.met?'首次会面已记入交情，不再重复赠礼。':vicinity}));
+    let commission=null;
+    if(n.commission){const c=n.commission,record=p.commission,progress=record.accepted?Math.max(0,npcMeasure(state,c)-(c.relative?record.baseline:0)):0;
+      const ready=record.accepted&&!record.claimed&&progress>=c.target;
+      const reason=vicinity||!p.met&&'先完成首次会面。'||record.claimed&&'委托奖励已经领取。'||!record.accepted&&'尚未接取此委托。'||progress<c.target&&'真实历练进度尚未完成。'||'';
+      commission={...c,accepted:record.accepted,claimed:record.claimed,progress:Math.min(c.target,progress),ready,canClaim:ready&&!vicinity,cost:{},reason};
+    }
+    const services=(n.services||[]).map(service=>{
+      const record=p.services[service.id],remaining=record?Math.max(0,service.cooldown-(state.time-record.lastAt)):0;
+      let reason=vicinity;if(!reason&&!p.met)reason='先完成首次会面。';if(!reason&&p.rapport<(service.minRapport||0))reason=`交情需要 ${service.minRapport}，首次普通交易或完成委托可增加交情。`;
+      if(!reason&&remaining>0)reason=`还需 ${Math.ceil(remaining)} 秒历练时间。`;
+      if(!reason&&service.restore&&state.player.hp>=stats(state).maxHp&&state.player.mp>=stats(state).maxMp&&state.player.slow<=0)reason='气血灵力充盈且未受寒，无须诊治。';
+      if(!reason&&!canPay(state,service.cost))reason='需要 '+costText(service.cost)+'。';
+      return{...service,remaining,available:!reason,reason};
+    });
+    return{...n,met:p.met,choice:p.choice,rapport:p.rapport,near,choices,commission,services};
+  }
+
+  function npcAction(state,id){
+    const bits=id.split(':');if(bits[0]!=='npc')return null;
+    const [,npcId,kind,key]=bits,info=npcInfo(state,npcId),n=CONTENT.NPC_CHARACTERS[npcId];
+    if(!info)return outcome(state,id,false,'此处没有这位人物。');
+    if(state.dead||!info.near||!isSafe(state))return outcome(state,id,false,state.dead?'先重聚灵身。':!info.near?`请靠近${info.name}再交谈。`:'请在安全驿站内交谈。');
+    if(!['talk','accept','claim','service'].includes(kind)||bits.length!==((kind==='talk'||kind==='service')?4:3))return outcome(state,id,false,'未知人物互动。');
+    const previous=state.npcProgress[npcId];
+    const p=previous||{met:false,choice:null,rapport:0,commission:{accepted:false,claimed:false,baseline:0},services:{}};
+    if(kind==='talk'){
+      const c=info.choices.find(c=>c.id===key);if(!c||!c.available)return outcome(state,id,false,c&&c.reason||'无此会面选择。');
+      grant(state,c.reward);p.met=true;p.choice=c.id;p.rapport=c.rapport;state.npcProgress[npcId]=p;
+      return outcome(state,id,true,`${n.name}：${c.description}`);
+    }
+    if(!p.met)return outcome(state,id,false,'先完成首次会面，再接委托或交易。');
+    if(kind==='accept'){
+      if(!n.commission)return outcome(state,id,false,'这位人物没有未接取的委托。');
+      if(p.commission.accepted)return outcome(state,id,false,p.commission.claimed?'此委托已完成。':'已经接取此委托。');
+      p.commission={accepted:true,claimed:false,baseline:n.commission.relative?npcMeasure(state,n.commission):0};
+      return outcome(state,id,true,`已接取${n.commission.name}。${n.commission.description}`);
+    }
+    if(kind==='claim'){
+      if(!info.commission||!info.commission.canClaim)return outcome(state,id,false,info.commission&&info.commission.reason||'没有可以交付的委托。');
+      grant(state,n.commission.reward);p.commission.claimed=true;p.rapport=Math.min(10,p.rapport+2);
+      return outcome(state,id,true,`${n.name}的委托已完成，奖励收入背包，交情 +2。`);
+    }
+    const service=info.services.find(s=>s.id===key);if(!service||!service.available)return outcome(state,id,false,service&&service.reason||'无此服务。');
+    pay(state,service.cost);grant(state,service.reward);
+    if(service.restore){const st=stats(state);state.player.hp=Math.min(st.maxHp,state.player.hp+st.maxHp*service.restore.hpPercent);state.player.mp=Math.min(st.maxMp,state.player.mp+st.maxMp*service.restore.mpPercent);if(service.restore.clearSlow)state.player.slow=0;effect(state,'heal',state.player.x,state.player.y,.8,60,{color:n.color});}
+    const record=p.services[key];if(!record)p.rapport=Math.min(10,p.rapport+1);p.services[key]={uses:(record?record.uses:0)+1,lastAt:state.time};
+    return outcome(state,id,true,`${n.name}已完成${service.label}。`);
+  }
+
   function expandedAction(state,id){
-    const [kind,key]=id.split(':');if(!['travel','learn','train','technique','use','equip','craft','buy','story','claim'].includes(kind)||!key)return null;
+    const [kind,key]=id.split(':');if(!['travel','learn','train','technique','use','equip','craft','buy','story','claim','promote'].includes(kind)||!key)return null;
     if(kind==='travel')return travel(state,key);
     if(state.dead)return outcome(state,id,false,'灵身已散，先重聚灵身。');
-    if(['learn','train','equip','craft','buy','story','claim','technique'].includes(kind)&&!isSafe(state))return outcome(state,id,false,'请返回安全驿站后进行此操作。');
+    if(['learn','train','equip','craft','buy','story','claim','technique','promote'].includes(kind)&&!isSafe(state))return outcome(state,id,false,'请返回安全驿站后进行此操作。');
+    if(kind==='promote'){
+      if(id.split(':').length!==2)return outcome(state,id,false,'未知功法晋阶操作。');
+      const info=techniqueInfo(state,key);if(!info||!info.known)return outcome(state,id,false,'先习得这门功法。');
+      if(!info.canPromote)return outcome(state,id,false,info.promoteReason);
+      pay(state,info.promoteCost);state.techniqueGrades[key]=info.gradeIndex+1;
+      const grade=techniqueInfo(state,key);effect(state,'ring',state.player.x,state.player.y,1,100,{color:grade.gradeColor});
+      return outcome(state,id,true,`${info.name}晋升${grade.gradeName}，道术威力提高，耗灵与冷却降低。`);
+    }
     if(kind==='technique'){if(!state.techniques[key])return outcome(state,id,false,'尚未习得此功法。');state.activeTechnique=key;return outcome(state,id,true,`已运转${CONTENT.TECHNIQUES[key].name}，按 Q 施展。`);}
     if(kind==='learn'){
       const t=CONTENT.TECHNIQUES[key],book=key+'Book';if(!t)return outcome(state,id,false,'不存在这门功法。');
       if(state.techniques[key])return outcome(state,id,false,'已习得此法，可继续研习提升重数。');
       if(!(state.inventory[book]>0))return outcome(state,id,false,'缺少对应残卷，可向云游商人购买或探索秘境。');
-      state.inventory[book]--;state.techniques[key]=1;return outcome(state,id,true,`研读残卷，习得${t.name}一重。`);
+      state.inventory[book]--;state.techniques[key]=1;state.techniqueGrades[key]=0;return outcome(state,id,true,`研读残卷，习得${t.name}黄阶一重。`);
     }
     if(kind==='train'){
       const info=techniqueInfo(state,key);if(!info||!info.known)return outcome(state,id,false,'先习得功法。');
@@ -618,6 +705,7 @@
 
   function action(state, id) {
     if(typeof id!=='string')return outcome(state,'unknown',false,'未知操作。');
+    const character=npcAction(state,id);if(character)return character;
     const extended=expandedAction(state,id);if(extended)return extended;
     const p = state.player, s = stats(state);
     if (id === 'revive') {
@@ -759,7 +847,7 @@
 
   function serialize(state) {
     state.worlds[state.mapId]={enemies:state.enemies,nodes:state.nodes,drops:state.drops};
-    const keys=['version','seed','rng','time','player','mapId','worlds','root','techniques','activeTechnique','inventory','equipment','buffs','story','progress','trials','projectiles','logs','quests','questRewards','won','dead','meditationCd'];
+    const keys=['version','seed','rng','time','player','mapId','worlds','root','techniques','techniqueGrades','npcProgress','activeTechnique','inventory','equipment','buffs','story','progress','trials','projectiles','logs','quests','questRewards','won','dead','meditationCd'];
     const data={};for(const key of keys)data[key]=state[key];return JSON.stringify(data);
   }
 
@@ -844,7 +932,7 @@
   function deserialize(json){
     const fail=()=>{throw new Error('存档无效或不兼容，请选择有效的山海问剑存档。');};
     if(typeof json!=='string'||json.length>1500000)fail();let d;try{d=JSON.parse(json);}catch(_){fail();}
-    if(!d||typeof d!=='object')fail();if(d.version===1)return expand(deserializeV1(json),true);if(d.version!==2)fail();
+    if(!d||typeof d!=='object')fail();if(d.version===1)return expand(deserializeV1(json),true);if(d.version!==2&&d.version!==3)fail();
     const num=(v,lo,hi,integer=false)=>{if(!finite(v)||v<lo||v>hi||integer&&!Number.isInteger(v))fail();return v;};
     const bool=v=>{if(typeof v!=='boolean')fail();return v;};
     const object=v=>{if(!v||typeof v!=='object'||Array.isArray(v))fail();return v;};
@@ -854,6 +942,8 @@
     const r=object(d.root);if(!CONTENT.ROOT_GRADES[r.grade])fail();s.root={grade:r.grade,elements:ids(r.elements,Object.keys(CONTENT.ELEMENTS),2),legacy:bool(r.legacy)};
     if(!s.root.elements.length||s.root.legacy&&(s.root.grade!=='mortal'||s.root.elements.length!==1||s.root.elements[0]!=='metal'))fail();
     s.techniques={};for(const [id,level]of Object.entries(object(d.techniques))){if(!CONTENT.TECHNIQUES[id])fail();s.techniques[id]=num(level,1,3,true);}if(!s.techniques.sword||!s.techniques[d.activeTechnique])fail();s.activeTechnique=d.activeTechnique;
+    s.techniqueGrades={};if(d.version===2){for(const id of Object.keys(s.techniques))s.techniqueGrades[id]=0;}
+    else{const grades=object(d.techniqueGrades);if(Object.keys(grades).length!==Object.keys(s.techniques).length)fail();for(const [id,index]of Object.entries(grades)){if(!s.techniques[id])fail();s.techniqueGrades[id]=num(index,0,4,true);}}
     s.inventory={};for(const [id,count]of Object.entries(object(d.inventory))){const item=CONTENT.ITEMS[id];if(!item||item.resourceField)fail();s.inventory[id]=num(count,0,1e7,true);}if(!s.inventory.starterSword||!s.inventory.clothRobe)fail();
     const eq=object(d.equipment);s.equipment={};for(const slot of ['weapon','robe','charm']){const id=eq[slot];if(id===null){if(slot!=='charm')fail();s.equipment[slot]=null;}else{const item=CONTENT.ITEMS[id];if(!item||item.slot!==slot||!s.inventory[id])fail();s.equipment[slot]=id;}}
     if(!Array.isArray(d.buffs)||d.buffs.length>3)fail();s.buffs=d.buffs.map(b=>{if(!b||!['rage','ward','insight'].includes(b.type))fail();return{type:b.type,life:num(b.life,0,{rage:40,ward:45,insight:60}[b.type])};});if(new Set(s.buffs.map(b=>b.type)).size!==s.buffs.length)fail();
@@ -875,6 +965,7 @@
     if(s.progress.visited.some(id=>CONTENT.MAPS[id].realmRequired>s.player.realm)||s.progress.bosses.some(id=>ENEMY[id].realm>s.player.realm))fail();
     for(const [id,count]of Object.entries(object(progress.gathered))){if(!CONTENT.RESOURCES[id])fail();s.progress.gathered[id]=num(count,0,1e8,true);}
     const trials=object(d.trials);s.trials={};for(const id of Object.keys(CONTENT.TRIAL_REWARDS)){const t=object(trials[id]);s.trials[id]={wave:num(t.wave,1,3,true),cleared:bool(t.cleared),clears:num(t.clears,0,1e7,true),rewarded:bool(t.rewarded)};if(t.rewarded!==(t.clears>0)||t.cleared&&(t.wave!==3||t.clears<1))fail();const boss=CONTENT.MAPS[id].spawns.find(v=>v[3]===3)[0];if(t.rewarded&&(!s.progress.visited.includes(id)||!s.progress.bosses.includes(boss)))fail();}
+    for(const [id,index]of Object.entries(s.techniqueGrades)){const grade=Object.values(CONTENT.TECHNIQUE_GRADES).find(g=>g.index===index);if(s.techniques[id]<grade.levelRequired||s.player.realm<grade.realmRequired||Object.values(CONTENT.TECHNIQUE_GRADES).filter(g=>g.index<=index).some(g=>g.trialsRequired.some(map=>!s.trials[map].rewarded)))fail();}
     const story=object(d.story);s.story.chapter=num(story.chapter,0,CONTENT.STORY.length,true);s.story.completed=ids(story.completed,CONTENT.STORY.map(c=>c.id));if(s.story.completed.length!==s.story.chapter||s.story.completed.some((id,i)=>id!==CONTENT.STORY[i].id))fail();
     s.story.choices={};s.story.relations={mercy:0,wisdom:0,valor:0};if(Object.keys(object(story.choices)).length!==s.story.chapter)fail();
     if(!Array.isArray(story.journal)||story.journal.length!==s.story.chapter)fail();s.story.journal=[];
@@ -889,6 +980,12 @@
       saved.nodes.forEach((v,i)=>{if(!v||v.id!==world.nodes[i].id||v.type!==world.nodes[i].type)fail();world.nodes[i].ready=num(v.ready,0,120);});world.drops=loadDrops(saved.drops);s.worlds[mapId]=world;
     }
     const current=s.worlds[s.mapId];s.enemies=current.enemies;s.nodes=current.nodes;s.drops=current.drops;
+    s.npcProgress={};if(d.version===3){for(const [id,v]of Object.entries(object(d.npcProgress))){const npc=CONTENT.NPC_CHARACTERS[id];if(!npc||!s.progress.visited.includes(npc.mapId))fail();object(v);if(bool(v.met)!==true)fail();const choice=npc.choices.find(c=>c.id===v.choice);if(!choice)fail();const c=object(v.commission),accepted=bool(c.accepted),claimed=bool(c.claimed),baseline=num(c.baseline,0,1e7,true);if(claimed&&!accepted||!accepted&&baseline!==0||!npc.commission&&(accepted||claimed||baseline!==0)||npc.commission&&!npc.commission.relative&&baseline!==0)fail();if(npc.commission&&baseline>npcMeasure(s,npc.commission))fail();
+      const services={};for(const [serviceId,record]of Object.entries(object(v.services))){const service=(npc.services||[]).find(service=>service.id===serviceId);if(!service)fail();object(record);services[serviceId]={uses:num(record.uses,1,1e7,true),lastAt:num(record.lastAt,0,s.time)};if(record.lastAt<(record.uses-1)*service.cooldown-1e-6)fail();}
+      for(const serviceId of Object.keys(services)){const service=npc.services.find(service=>service.id===serviceId);if(choice.rapport+(claimed?2:0)+Object.keys(services).length-1<service.minRapport)fail();}
+      const rapport=Math.min(10,choice.rapport+(claimed?2:0)+Object.keys(services).length);if(num(v.rapport,0,10,true)!==rapport)fail();
+      s.npcProgress[id]={met:true,choice:choice.id,rapport,commission:{accepted,claimed,baseline},services};if(claimed&&npcMeasure(s,npc.commission)-(npc.commission.relative?baseline:0)<npc.commission.target)fail();
+    }}
     if(!Array.isArray(d.projectiles)||d.projectiles.length>200)fail();s.projectiles=d.projectiles.map(v=>{
       if(!v||!['enemy','player'].includes(v.owner)||v.owner==='player'&&v.sourceId!=='player'||v.owner==='enemy'&&!s.enemies.some(e=>e.id===v.sourceId))fail();
       const b={x:num(v.x,0,WIDTH),y:num(v.y,0,HEIGHT),vx:num(v.vx,-1000,1000),vy:num(v.vy,-1000,1000),life:num(v.life,0,5),radius:num(v.radius,1,35),owner:v.owner,sourceId:v.sourceId,damage:num(v.damage,0,10000)};
@@ -903,6 +1000,6 @@
   }
 
   return { createGame, step, interact, action, serialize, deserialize, stats, objective, zoneAt,
-    mapInfo,isSafe,rootInfo,techniqueInfo,storyInfo,questsInfo,inventoryInfo,CONTENT,
+    mapInfo,isSafe,rootInfo,techniqueInfo,storyInfo,questsInfo,inventoryInfo,npcInfo,CONTENT,
     WIDTH, HEIGHT, HUB, PONDS, OBSTACLES, REALMS, NPCS, ENEMY };
 });

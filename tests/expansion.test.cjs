@@ -120,7 +120,7 @@ test('matching roots affect technique cost and damage and elemental equipment ad
   assert.ok(m.affinity>n.affinity);assert.ok(m.manaCost<n.manaCost);
   X.step(neutral,{skill:true,aimX:1190,aimY:1800},.05);X.step(matched,{skill:true,aimX:1190,aimY:1800},.05);
   assert.ok(matched.enemies[0].hp<neutral.enemies[0].hp);
-  const fire=fixture();fire.techniques.flame=1;fire.inventory.flameSword=1;
+  const fire=fixture();fire.techniques.flame=1;if(fire.techniqueGrades)fire.techniqueGrades.flame=0;fire.inventory.flameSword=1;
   const before=X.techniqueInfo(fire,'flame').affinity;X.action(fire,'equip:flameSword');
   assert.equal(safeOk(fire),true);assert.ok(X.techniqueInfo(fire,'flame').affinity>before);
 });
@@ -130,7 +130,7 @@ function safeOk(s){return !!s.lastAction&&s.lastAction.ok;}
 test('all six Q schools have distinct combat effects and every active effect can be saved',()=>{
   const X=engine(),signatures=new Set();
   for(const id of Object.keys(C.TECHNIQUES)){
-    const s=fixture();s.techniques[id]=1;s.activeTechnique=id;
+    const s=fixture();s.techniques[id]=1;if(s.techniqueGrades)s.techniqueGrades[id]=0;s.activeTechnique=id;
     s.player.x=1100;s.player.y=1800;s.player.hp=X.stats(s).maxHp*.5;
     for(let i=0;i<3;i++)Object.assign(s.enemies[i],{x:1190+i*120,y:1800,homeX:1190+i*120,homeY:1800});
     const hp=s.player.hp,mp=s.player.mp,info=X.techniqueInfo(s);
@@ -293,7 +293,7 @@ test('story choices have different consequences and journal and quest claims sur
 
 test('genuine v1 migration preserves advancement and resources and creates a balanced durable legacy root',()=>{
   const X=engine(),old=JSON.parse(LEGACY),a=X.deserialize(LEGACY),b=X.deserialize(LEGACY);
-  assert.equal(a.version,2);assert.equal(a.mapId,'main');assert.deepEqual(a.root,b.root);assert.equal(a.root.legacy,true);
+  assert.ok(a.version>=2);assert.equal(a.mapId,'main');assert.deepEqual(a.root,b.root);assert.equal(a.root.legacy,true);
   assert.equal(X.techniqueInfo(a).affinity,0);assert.equal(X.techniqueInfo(a).manaCost,28);
   for(const key of['realm','weapon','hp','mp','xp','stones','herbs','potions','x','y'])assert.equal(a.player[key],old.player[key],key);
   assert.deepEqual(a.quests,old.quests);assert.deepEqual(a.questRewards,old.questRewards);
@@ -303,7 +303,7 @@ test('genuine v1 migration preserves advancement and resources and creates a bal
 });
 
 test('high-tier elemental projectiles preserve damage and all status fields beyond v1 limits',()=>{
-  const X=engine(),s=fixture(3);s.root={grade:'immortal',elements:['fire'],legacy:false};s.player.weapon=6;s.techniques.flame=3;s.activeTechnique='flame';
+  const X=engine(),s=fixture(3);s.root={grade:'immortal',elements:['fire'],legacy:false};s.player.weapon=6;s.techniques.flame=3;if(s.techniqueGrades)s.techniqueGrades.flame=0;s.activeTechnique='flame';
   for(const id of['flameSword','frostRobe','heavenCharm']){s.inventory[id]=1;X.action(s,'equip:'+id);}
   s.buffs=[{type:'rage',life:40}];s.player.hp=X.stats(s).maxHp;s.player.mp=X.stats(s).maxMp;s.player.x=1100;s.player.y=1900;
   X.step(s,{skill:true,aimX:2100,aimY:1900},.05);
@@ -312,7 +312,7 @@ test('high-tier elemental projectiles preserve damage and all status fields beyo
   assert.equal(restored.activeTechnique,'flame');assert.deepEqual(restored.buffs,s.buffs);
 });
 
-test('malformed v2 progression, inventory, elemental effects and map states are rejected',()=>{
+test('malformed expanded progression, inventory, elemental effects and map states are rejected',()=>{
   const X=engine();
   const edits=[
     d=>{d.mapId='missing';},d=>{d.progress.visited.push('red');},d=>{d.progress.bosses.push('frostWyrm');},d=>{d.root.grade='missing';},d=>{d.root.elements=['fire','fire'];},d=>{d.root.legacy=true;},
